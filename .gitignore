@@ -1,0 +1,4 @@
+truf.exe
+*.exe
+*.db
+node_modules/
