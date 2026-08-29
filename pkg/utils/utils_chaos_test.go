@@ -1,7 +1,6 @@
 package utils_test
 
 import (
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -10,51 +9,70 @@ import (
 )
 
 func TestChaosParseCurrencyRejectsNonFiniteInput(t *testing.T) {
-	t.Skip("CHAOS: ParseCurrency accepts NaN/Inf via strconv.ParseFloat")
-	for _, in := range []string{"NaN", "Inf", "-Inf", "inf", "1e400"} {
-		v, err := utils.ParseCurrency(in)
-		if err == nil && (math.IsNaN(v) || math.IsInf(v, 0)) {
+	for _, in := range []string{"NaN", "Inf", "-Inf", "inf", "1e400", "1e3"} {
+		if v, err := utils.ParseCurrency(in); err == nil {
 			t.Errorf("ParseCurrency(%q) = %v, want error", in, v)
 		}
 	}
 }
 
 func TestChaosParseCurrencyRejectsGarbage(t *testing.T) {
-	t.Skip("CHAOS: ParseCurrency accepts \"$$\" (=0) and \"1,5,\" (=15)")
-	for _, in := range []string{"1.2.3", "abc", "$$", "1,5,", "１２"} {
-		if _, err := utils.ParseCurrency(in); err == nil {
-			t.Errorf("ParseCurrency(%q) accepted", in)
+	for _, in := range []string{"", "1.2.3", "abc", "$$", "1,5,", "１２", "-5", "1,234", "1,2,3", "1.234.5", "12.34.56", "1..5", ",5,"} {
+		if v, err := utils.ParseCurrency(in); err == nil {
+			t.Errorf("ParseCurrency(%q) accepted as %d", in, v)
 		}
 	}
 }
 
-func TestChaosFormatCurrencyNonFiniteDoesNotPanic(t *testing.T) {
-	t.Skip("CHAOS: FormatCurrency panics on NaN/Inf (no decimal point to split)")
-	for _, v := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Errorf("FormatCurrency(%v) panicked: %v", v, r)
-				}
-			}()
-			_ = utils.FormatCurrency(v)
-		}()
+func TestChaosParseCurrencyBrazilianAndUSInputs(t *testing.T) {
+	cases := map[string]int64{
+		"1,5":          150,
+		"1,50":         150,
+		"1.234,56":     123456,
+		"1234,56":      123456,
+		"1.234.567,89": 123456789,
+		"1234.56":      123456,
+		"1,234.56":     123456,
+		"1.234":        123400,
+		"10":           1000,
+		"0":            0,
+		"0,07":         7,
+		"$ 42":         4200,
+		"R$ 42,10":     4210,
+		"  7,3  ":      730,
+	}
+	for in, want := range cases {
+		got, err := utils.ParseCurrency(in)
+		if err != nil || got != want {
+			t.Errorf("ParseCurrency(%q) = %d, %v; want %d", in, got, err, want)
+		}
 	}
 }
 
-func TestChaosFormatCurrencyNegativeZeroRounding(t *testing.T) {
-	t.Skip("CHAOS: FormatCurrency(-0.001) renders $-0.00 (cosmetic)")
-	got := utils.FormatCurrency(-0.001)
-	if strings.Contains(got, "-") {
-		t.Errorf("FormatCurrency(-0.001) = %q, want no minus sign", got)
+func TestChaosFormatCurrencyBrazilianStyle(t *testing.T) {
+	cases := map[int64]string{
+		0:          "$0,00",
+		7:          "$0,07",
+		150:        "$1,50",
+		123456:     "$1.234,56",
+		123456789:  "$1.234.567,89",
+		-1:         "-$0,01",
+		-123456:    "-$1.234,56",
+		1 << 62:    "$46.116.860.184.273.879,04",
+		-(1 << 62): "-$46.116.860.184.273.879,04",
+	}
+	for in, want := range cases {
+		if got := utils.FormatCurrency(in); got != want {
+			t.Errorf("FormatCurrency(%d) = %q, want %q", in, got, want)
+		}
 	}
 }
 
 func TestChaosFormatCurrencyRoundTripsParse(t *testing.T) {
-	for _, v := range []float64{0, 0.1, 1234567.89, -42.5, 1e12} {
+	for _, v := range []int64{0, 1, 10, 150, 123456789, 1e12} {
 		back, err := utils.ParseCurrency(utils.FormatCurrency(v))
-		if err != nil || math.Abs(back-v) > 0.005 {
-			t.Errorf("round trip %v -> %q -> %v (%v)", v, utils.FormatCurrency(v), back, err)
+		if err != nil || back != v {
+			t.Errorf("round trip %d -> %q -> %d (%v)", v, utils.FormatCurrency(v), back, err)
 		}
 	}
 }
@@ -85,11 +103,26 @@ func TestChaosParseDateInvalidNeverPanics(t *testing.T) {
 }
 
 func TestChaosAddMonthsFromMonthEnd(t *testing.T) {
-	t.Skip("CHAOS: AddMonths(Jan 31,1) = Mar 3 (contestable: only called with 1st of month)")
-	jan31 := time.Date(2026, time.January, 31, 0, 0, 0, 0, time.UTC)
-	got := utils.AddMonths(jan31, 1)
-	if got.Month() != time.February {
-		t.Errorf("AddMonths(Jan 31, 1) = %v, want a date in February", got)
+	d := func(y int, m time.Month, day int) time.Time {
+		return time.Date(y, m, day, 0, 0, 0, 0, time.UTC)
+	}
+	cases := []struct {
+		in     time.Time
+		months int
+		want   time.Time
+	}{
+		{d(2026, time.January, 31), 1, d(2026, time.February, 28)},
+		{d(2024, time.January, 31), 1, d(2024, time.February, 29)},
+		{d(2026, time.March, 31), -1, d(2026, time.February, 28)},
+		{d(2026, time.January, 15), 1, d(2026, time.February, 15)},
+		{d(2026, time.December, 31), 1, d(2027, time.January, 31)},
+		{d(2026, time.January, 1), -1, d(2025, time.December, 1)},
+		{d(2026, time.January, 31), 13, d(2027, time.February, 28)},
+	}
+	for _, c := range cases {
+		if got := utils.AddMonths(c.in, c.months); !got.Equal(c.want) {
+			t.Errorf("AddMonths(%v, %d) = %v, want %v", c.in.Format("2006-01-02"), c.months, got.Format("2006-01-02"), c.want.Format("2006-01-02"))
+		}
 	}
 }
 

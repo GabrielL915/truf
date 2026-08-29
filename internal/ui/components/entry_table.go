@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/gabriel-luiz/truf/internal/ledger"
@@ -114,44 +115,52 @@ func (t *EntryTable) CancelEdit() {
 	t.EditBuffer = ""
 }
 
-func (t *EntryTable) NextColumn() {
+func (t *EntryTable) NextColumn() error {
 	if !t.Editing {
-		return
+		return nil
 	}
 
-	t.saveCurrentColumn()
+	if err := t.saveCurrentColumn(); err != nil {
+		return err
+	}
 
 	t.EditingColumn++
 	if t.EditingColumn > 3 {
 		t.Editing = false
 		t.EditBuffer = ""
 		t.originalEntry = nil
-		return
+		return nil
 	}
 
 	t.loadCurrentColumn()
+	return nil
 }
 
-func (t *EntryTable) saveCurrentColumn() {
+func (t *EntryTable) saveCurrentColumn() error {
 	if t.Cursor >= len(t.Entries) {
-		return
+		return nil
 	}
 	entry := &t.Entries[t.Cursor]
 
 	switch t.EditingColumn {
 	case 0:
-		if date, err := utils.ParseDate(t.EditBuffer); err == nil {
-			entry.Date = date
+		date, err := utils.ParseDate(t.EditBuffer)
+		if err != nil {
+			return err
 		}
+		entry.Date = date
 	case 1:
 		entry.Description = t.EditBuffer
 	case 2:
 		entry.Category = t.EditBuffer
 	case 3:
-		if amount, err := utils.ParseCurrency(t.EditBuffer); err == nil {
-			entry.Amount = amount
+		amount, err := utils.ParseCurrency(t.EditBuffer)
+		if err != nil {
+			return err
 		}
+		entry.Amount = amount
 	}
+	return nil
 }
 
 func (t *EntryTable) loadCurrentColumn() {
@@ -183,7 +192,8 @@ func (t *EntryTable) Backspace() {
 	if !t.Editing || len(t.EditBuffer) == 0 {
 		return
 	}
-	t.EditBuffer = t.EditBuffer[:len(t.EditBuffer)-1]
+	_, size := utf8.DecodeLastRuneInString(t.EditBuffer)
+	t.EditBuffer = t.EditBuffer[:len(t.EditBuffer)-size]
 }
 
 func (t *EntryTable) View() string {
@@ -317,8 +327,8 @@ func (t *EntryTable) getCellStyle(selected, editing bool) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(styles.Text)
 }
 
-func (t *EntryTable) total() float64 {
-	var total float64
+func (t *EntryTable) total() int64 {
+	var total int64
 	for _, e := range t.Entries {
 		total += e.Amount
 	}

@@ -10,49 +10,50 @@ import (
 )
 
 func TestChaosSummaryBalanceIsExactForCents(t *testing.T) {
-	t.Skip("CHAOS: float64 money drifts (0.1+0.2-0.3 != 0); fix = integer cents")
 	l, _ := newLedger(t)
-	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 0.1})
-	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 0.2})
-	mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 0.3})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 10})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 20})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 30})
 
 	if b := l.Summary(fixedNow).Balance; b != 0 {
-		t.Errorf("0.1 + 0.2 - 0.3 balance = %v, want exactly 0", b)
+		t.Errorf("10 + 20 - 30 balance = %v, want exactly 0", b)
 	}
 }
 
 func TestChaosTotalBalanceAfterManyCents(t *testing.T) {
-	t.Skip("CHAOS: float64 money drifts over many entries; fix = integer cents")
 	l, _ := newLedger(t)
 	for range 1000 {
-		mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 0.01})
+		mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 1})
 	}
-	mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 10})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 1000})
 	if b := l.TotalBalance(); b != 0 {
-		t.Errorf("1000 × 0.01 - 10 = %v, want exactly 0", b)
-	}
-}
-
-func TestChaosAddRejectsNonFiniteAmount(t *testing.T) {
-	t.Skip("CHAOS: Add accepts NaN/Inf, poisons TotalBalance and crashes FormatCurrency")
-	for _, a := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		l, _ := newLedger(t)
-		if _, err := l.Add(ledger.Entry{Kind: ledger.Income, Amount: a}); err == nil {
-			t.Errorf("Add(amount=%v) accepted; TotalBalance now %v", a, l.TotalBalance())
-		}
+		t.Errorf("1000 × 1 - 1000 = %v, want exactly 0", b)
 	}
 }
 
 func TestChaosAddRejectsNegativeAmount(t *testing.T) {
-	t.Skip("CHAOS: negative amounts accepted (contestable: may be intended for refunds)")
 	l, _ := newLedger(t)
 	if _, err := l.Add(ledger.Entry{Kind: ledger.Expense, Amount: -50}); err == nil {
 		t.Errorf("negative expense accepted; balance %v", l.TotalBalance())
 	}
+	if l.TotalBalance() != 0 {
+		t.Errorf("rejected entry still changed balance: %v", l.TotalBalance())
+	}
+}
+
+func TestChaosUpdateRejectsNegativeAmount(t *testing.T) {
+	l, _ := newLedger(t)
+	e := mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 50})
+	e.Amount = -50
+	if err := l.Update(e); err == nil {
+		t.Error("Update to negative amount accepted")
+	}
+	if l.TotalBalance() != -50 {
+		t.Errorf("balance after rejected update = %v, want -50", l.TotalBalance())
+	}
 }
 
 func TestChaosAddRejectsUnknownKind(t *testing.T) {
-	t.Skip("CHAOS: unknown Kind accepted and counted as expense (contestable)")
 	l, _ := newLedger(t)
 	if _, err := l.Add(ledger.Entry{Kind: ledger.Kind("refund"), Amount: 10}); err == nil {
 		s := l.Summary(fixedNow)
@@ -61,17 +62,18 @@ func TestChaosAddRejectsUnknownKind(t *testing.T) {
 }
 
 func TestChaosAddWithDuplicateIDIsRejected(t *testing.T) {
-	t.Skip("CHAOS: duplicate ID accepted in memory; SQLite PK then rejects the whole save")
 	l, _ := newLedger(t)
 	first := mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 10})
 	_, err := l.Add(ledger.Entry{ID: first.ID, Kind: ledger.Income, Amount: 20})
 	if err == nil {
 		t.Fatalf("duplicate ID accepted; total=%v", l.TotalBalance())
 	}
+	if l.TotalBalance() != 10 {
+		t.Errorf("balance after rejected duplicate = %v, want 10", l.TotalBalance())
+	}
 }
 
 func TestChaosChartSeriesHostileN(t *testing.T) {
-	t.Skip("CHAOS: ChartSeries panics on negative n (make before the n<=0 guard)")
 	l, _ := newLedger(t)
 	for _, n := range []int{0, -1, math.MinInt32} {
 		func() {

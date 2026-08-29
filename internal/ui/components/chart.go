@@ -92,11 +92,11 @@ func (c *Chart) renderChart() string {
 	}
 
 	cnv := canvas.New(chartW, chartH)
-	c.drawSeries(&cnv, c.Data.Income, minX, maxX, minY, maxY,
+	c.drawSeries(&cnv, toFloat(c.Data.Income), minX, maxX, minY, maxY,
 		lipgloss.NewStyle().Foreground(styles.Success))
-	c.drawSeries(&cnv, c.Data.Expenses, minX, maxX, minY, maxY,
+	c.drawSeries(&cnv, toFloat(c.Data.Expenses), minX, maxX, minY, maxY,
 		lipgloss.NewStyle().Foreground(styles.Danger))
-	c.drawSeries(&cnv, c.Data.Balance, minX, maxX, minY, maxY,
+	c.drawSeries(&cnv, toFloat(c.Data.Balance), minX, maxX, minY, maxY,
 		lipgloss.NewStyle().Foreground(styles.Accent))
 
 	canvasStr := cnv.View()
@@ -105,9 +105,9 @@ func (c *Chart) renderChart() string {
 		var yLabel string
 		switch i {
 		case 0:
-			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(maxY))
+			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(int64(math.Round(maxY))))
 		case len(rows) - 1:
-			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(minY))
+			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(int64(math.Round(minY))))
 		default:
 			yLabel = strings.Repeat(" ", yLabelWidth)
 		}
@@ -181,24 +181,31 @@ func abs2(x int) int {
 }
 
 func (c *Chart) dataRange() (minY, maxY float64) {
-	all := append(append(c.Data.Balance, c.Data.Income...), c.Data.Expenses...)
+	var all []int64
+	all = append(all, c.Data.Balance...)
+	all = append(all, c.Data.Income...)
+	all = append(all, c.Data.Expenses...)
 	if len(all) == 0 {
 		return 0, 1
 	}
-	minY, maxY = all[0], all[0]
+	minY, maxY = float64(all[0]), float64(all[0])
 	for _, v := range all[1:] {
-		if v < minY {
-			minY = v
-		}
-		if v > maxY {
-			maxY = v
-		}
+		minY = math.Min(minY, float64(v))
+		maxY = math.Max(maxY, float64(v))
 	}
 	if minY == maxY {
 		minY -= 1
 		maxY += 1
 	}
 	return minY, maxY
+}
+
+func toFloat(cents []int64) []float64 {
+	out := make([]float64, len(cents))
+	for i, v := range cents {
+		out[i] = float64(v)
+	}
+	return out
 }
 
 func (c *Chart) renderXLabels(offset, chartW int) string {

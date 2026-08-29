@@ -172,15 +172,24 @@ func (m *Model) handleTableEdit(msg tea.KeyMsg, t *components.EntryTable) (tea.M
 	case "esc":
 		t.CancelEdit()
 	case "tab", "enter":
-		t.NextColumn()
+		if err := t.NextColumn(); err != nil {
+			m.setErr(err)
+			return m, nil
+		}
+		m.setErr(nil)
 		if !t.Editing {
 			m.commitEdit(t)
 		}
 	case "backspace":
 		t.Backspace()
 	default:
-		if len(msg.String()) == 1 {
-			t.TypeChar(rune(msg.String()[0]))
+		switch msg.Type {
+		case tea.KeySpace:
+			t.TypeChar(' ')
+		case tea.KeyRunes:
+			for _, r := range msg.Runes {
+				t.TypeChar(r)
+			}
 		}
 	}
 	return m, nil

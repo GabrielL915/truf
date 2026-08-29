@@ -11,7 +11,7 @@ import (
 
 type StatusBar struct {
 	TimeRange    string
-	TotalBalance float64
+	TotalBalance int64
 	Err          error
 	Width        int
 }
@@ -26,7 +26,7 @@ func (s *StatusBar) SetTimeRange(start, end string) {
 	s.TimeRange = fmt.Sprintf("%s - %s", start, end)
 }
 
-func (s *StatusBar) SetBalance(balance float64) {
+func (s *StatusBar) SetBalance(balance int64) {
 	s.TotalBalance = balance
 }
 

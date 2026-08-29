@@ -40,6 +40,8 @@ func key(m *Model, k string) {
 		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "backspace":
 		msg = tea.KeyMsg{Type: tea.KeyBackspace}
+	case " ":
+		msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
 	default:
 		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 	}
@@ -49,6 +51,12 @@ func key(m *Model, k string) {
 func clearBuffer(m *Model) {
 	for range m.incomeTable.EditBuffer {
 		key(m, "backspace")
+	}
+}
+
+func typeText(m *Model, s string) {
+	for _, r := range s {
+		key(m, string(r))
 	}
 }
 
@@ -63,48 +71,93 @@ func openIncomeAndNew(t *testing.T, m *Model) {
 }
 
 func TestChaosTypingAccentedCharacterIsKept(t *testing.T) {
-	t.Skip("CHAOS: handleTableEdit drops multibyte runes (ç, ã, emoji)")
 	m, _ := chaosModel(t)
 	openIncomeAndNew(t, m)
 	key(m, "tab")
-	key(m, "ç")
-	key(m, "ã")
+	typeText(m, "çã")
+	key(m, " ")
 	key(m, "😀")
-	if got := m.incomeTable.EditBuffer; got != "çã😀" {
-		t.Errorf("buffer = %q, want %q", got, "çã😀")
+	if got := m.incomeTable.EditBuffer; got != "çã 😀" {
+		t.Errorf("buffer = %q, want %q", got, "çã 😀")
+	}
+	key(m, "enter")
+	key(m, "enter")
+	key(m, "enter")
+	if got := m.ledger.Entries(chaosNow, ledger.Income)[0].Description; got != "çã 😀" {
+		t.Errorf("persisted description = %q", got)
 	}
 }
 
 func TestChaosBackspaceOnMultibyteKeepsValidUTF8(t *testing.T) {
-	t.Skip("CHAOS: Backspace slices one byte, leaves invalid UTF-8 in buffer")
 	tbl := components.NewEntryTable("x", ledger.Income)
 	tbl.SetEntries([]ledger.Entry{{ID: "1", Date: chaosNow}})
 	tbl.StartEdit()
-	tbl.NextColumn()
+	if err := tbl.NextColumn(); err != nil {
+		t.Fatal(err)
+	}
 	tbl.EditBuffer = ""
+	tbl.TypeChar('a')
 	tbl.TypeChar('ç')
+	tbl.TypeChar('😀')
 	tbl.Backspace()
-	if tbl.EditBuffer != "" || !utf8.ValidString(tbl.EditBuffer) {
-		t.Errorf("after typing ç and backspace, buffer = %q (valid utf8: %v)", tbl.EditBuffer, utf8.ValidString(tbl.EditBuffer))
+	if tbl.EditBuffer != "aç" {
+		t.Errorf("after backspace of emoji, buffer = %q", tbl.EditBuffer)
+	}
+	tbl.Backspace()
+	if tbl.EditBuffer != "a" || !utf8.ValidString(tbl.EditBuffer) {
+		t.Errorf("after backspace of ç, buffer = %q (valid utf8: %v)", tbl.EditBuffer, utf8.ValidString(tbl.EditBuffer))
+	}
+	tbl.Backspace()
+	tbl.Backspace()
+	if tbl.EditBuffer != "" {
+		t.Errorf("over-backspace buffer = %q", tbl.EditBuffer)
 	}
 }
 
-func TestChaosInvalidAmountEditSurfacesFeedback(t *testing.T) {
-	t.Skip("CHAOS: invalid amount silently discarded, no status-bar feedback (contestable)")
+func TestChaosInvalidAmountEditSurfacesFeedbackAndKeepsEditing(t *testing.T) {
 	m, _ := chaosModel(t)
 	openIncomeAndNew(t, m)
 	key(m, "tab")
 	key(m, "tab")
 	key(m, "tab")
 	clearBuffer(m)
-	key(m, "a")
-	key(m, "b")
+	typeText(m, "ab")
 	key(m, "enter")
-	if m.incomeTable.Editing {
-		t.Fatal("still editing after last column commit")
+	if !m.incomeTable.Editing || m.incomeTable.EditingColumn != 3 {
+		t.Fatalf("invalid amount should keep the amount cell in edit mode (editing=%v col=%d)", m.incomeTable.Editing, m.incomeTable.EditingColumn)
 	}
 	if m.err == nil {
-		t.Error("amount 'ab' silently discarded, no error surfaced to status bar")
+		t.Error("amount 'ab' discarded with no error surfaced to status bar")
+	}
+	clearBuffer(m)
+	typeText(m, "1,5")
+	key(m, "enter")
+	if m.incomeTable.Editing {
+		t.Fatal("still editing after valid amount")
+	}
+	if m.err != nil {
+		t.Errorf("error not cleared after valid amount: %v", m.err)
+	}
+	if got := m.ledger.Entries(chaosNow, ledger.Income)[0].Amount; got != 150 {
+		t.Errorf("amount = %d cents, want 150", got)
+	}
+}
+
+func TestChaosInvalidDateEditSurfacesFeedback(t *testing.T) {
+	m, _ := chaosModel(t)
+	openIncomeAndNew(t, m)
+	clearBuffer(m)
+	typeText(m, "02/30/2026")
+	key(m, "enter")
+	if !m.incomeTable.Editing || m.incomeTable.EditingColumn != 0 {
+		t.Fatal("invalid date should keep the date cell in edit mode")
+	}
+	if m.err == nil {
+		t.Error("invalid date accepted silently")
+	}
+	key(m, "esc")
+	if m.incomeTable.Editing {
+		t.Error("esc did not cancel edit")
 	}
 }
 
@@ -112,15 +165,13 @@ func TestChaosEditingDateIntoOtherMonthKeepsUIConsistent(t *testing.T) {
 	m, _ := chaosModel(t)
 	openIncomeAndNew(t, m)
 	clearBuffer(m)
-	for _, r := range "02/10/2026" {
-		key(m, string(r))
-	}
+	typeText(m, "02/10/2026")
 	key(m, "enter")
 	key(m, "enter")
 	key(m, "enter")
 	key(m, "enter")
 	if m.incomeTable.Editing {
-		t.Fatal("still editing")
+		t.Fatalf("still editing: err=%v", m.err)
 	}
 	if n := len(m.incomeTable.Entries); n != 0 {
 		t.Errorf("entry moved to February still shown in March table (%d rows)", n)
@@ -182,9 +233,7 @@ func TestChaosRenderTinyAndHugeSizes(t *testing.T) {
 	m, _ := chaosModel(t)
 	openIncomeAndNew(t, m)
 	key(m, "tab")
-	for _, r := range strings.Repeat("字", 60) {
-		key(m, string(r))
-	}
+	typeText(m, strings.Repeat("字", 60))
 	key(m, "enter")
 	key(m, "enter")
 	key(m, "enter")
@@ -220,9 +269,10 @@ func TestChaosChartWithSinglePointAndFlatData(t *testing.T) {
 	c := components.NewChart()
 	c.SetSize(40, 10)
 	for _, d := range []ledger.ChartData{
-		{Months: []string{"Mar 26"}, Income: []float64{0}, Expenses: []float64{0}, Balance: []float64{0}},
-		{Months: []string{"Feb 26", "Mar 26"}, Income: []float64{-1e15, 1e15}, Expenses: []float64{0, 0}, Balance: []float64{0, 0}},
-		{Months: []string{"Feb 26", "Mar 26"}, Income: []float64{1}, Expenses: []float64{1, 2}, Balance: []float64{1, 2}},
+		{Months: []string{"Mar 26"}, Income: []int64{0}, Expenses: []int64{0}, Balance: []int64{0}},
+		{Months: []string{"Feb 26", "Mar 26"}, Income: []int64{-1e15, 1e15}, Expenses: []int64{0, 0}, Balance: []int64{0, 0}},
+		{Months: []string{"Feb 26", "Mar 26"}, Income: []int64{1}, Expenses: []int64{1, 2}, Balance: []int64{1, 2}},
+		{Months: []string{"Feb 26", "Mar 26"}, Income: []int64{1 << 62, 1 << 62}, Expenses: []int64{0, 0}, Balance: []int64{-(1 << 62), 1 << 62}},
 	} {
 		func() {
 			defer func() {
