@@ -3,3 +3,4 @@ truf.exe
 *.db
 node_modules/
 .claude/worktrees/
+chaos-reports/
