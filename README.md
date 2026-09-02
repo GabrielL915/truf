@@ -67,4 +67,5 @@ scripts/kb.sh add --id x.y --type decision --topic money --summary "..." --refs 
 scripts/kb.sh help
 ```
 
-Requires `jq`. Specs live in `docs/specs/` and are never deleted; each one gets a `spec.*` entry.
+Requires `jq`. CI runs `scripts/kb.sh check` (valid JSON, unique ids, every `refs` path exists).
+Specs are drafted locally in `docs/specs/` (gitignored) and distilled into a `spec.*` entry.
