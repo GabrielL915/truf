@@ -245,6 +245,9 @@ func TestChaosLegacyFloatDatabaseMigratesToCents(t *testing.T) {
 }
 
 func TestChaosLargeSnapshotSaveIsBounded(t *testing.T) {
+	if raceEnabled {
+		t.Skip("timing bound is not meaningful under -race")
+	}
 	s, _ := openStore(t)
 	var es []ledger.Entry
 	for i := range 20000 {
