@@ -190,7 +190,7 @@ func TestChartSeriesRunningBalance(t *testing.T) {
 			t.Fatalf("month %d: expected %q, got %q", i, want, data.Months[i])
 		}
 	}
-	for i, want := range []float64{1000, 600, 800} {
+	for i, want := range []int64{1000, 600, 800} {
 		if data.Balance[i] != want {
 			t.Fatalf("balance %d: expected %v, got %v", i, want, data.Balance[i])
 		}

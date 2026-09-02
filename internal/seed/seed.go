@@ -10,7 +10,7 @@ import (
 type entry struct {
 	description string
 	category    string
-	amount      float64
+	amount      int64
 }
 
 type month struct {
@@ -130,7 +130,7 @@ func add(l *ledger.Ledger, e entry, date time.Time, kind ledger.Kind) error {
 		Date:        date,
 		Description: e.description,
 		Category:    e.category,
-		Amount:      e.amount,
+		Amount:      e.amount * 100,
 		Kind:        kind,
 	})
 	return err

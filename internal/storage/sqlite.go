@@ -20,6 +20,9 @@ type SQLiteStorage struct {
 }
 
 func NewSQLiteStorage(dbPath string) (*SQLiteStorage, error) {
+	if dbPath == "" {
+		return nil, fmt.Errorf("database path is empty")
+	}
 	if dbPath[0] == '~' {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -32,7 +35,8 @@ func NewSQLiteStorage(dbPath string) (*SQLiteStorage, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	dsn := "file:" + filepath.ToSlash(dbPath) + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +81,20 @@ func (s *SQLiteStorage) init() error {
 		return err
 	}
 	s.hasMonthKey = hasMonthKey
+
+	hasCents, err := s.columnExists("entries", "amount_cents")
+	if err != nil {
+		return err
+	}
+	if !hasCents {
+		migrate := `
+		ALTER TABLE entries ADD COLUMN amount_cents INTEGER NOT NULL DEFAULT 0;
+		UPDATE entries SET amount_cents = CAST(ROUND(amount * 100) AS INTEGER);
+		`
+		if _, err := s.db.Exec(migrate); err != nil {
+			return err
+		}
+	}
 
 	var count int
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM categories").Scan(&count); err != nil {
@@ -133,7 +151,7 @@ func (s *SQLiteStorage) Load() (ledger.Snapshot, error) {
 	snapshot.Categories = categories
 
 	rows, err := s.db.Query(`
-		SELECT id, date, description, category, amount, entry_type
+		SELECT id, date, description, category, amount_cents, entry_type
 		FROM entries
 		ORDER BY date ASC
 	`)
@@ -144,7 +162,7 @@ func (s *SQLiteStorage) Load() (ledger.Snapshot, error) {
 
 	for rows.Next() {
 		var id, dateStr, desc, cat, entryType string
-		var amount float64
+		var amount int64
 
 		if err := rows.Scan(&id, &dateStr, &desc, &cat, &amount, &entryType); err != nil {
 			return ledger.Snapshot{}, err
@@ -155,9 +173,9 @@ func (s *SQLiteStorage) Load() (ledger.Snapshot, error) {
 			return ledger.Snapshot{}, fmt.Errorf("entry %s: invalid date %q: %w", id, dateStr, err)
 		}
 
-		kind := ledger.Expense
-		if entryType == string(ledger.Income) {
-			kind = ledger.Income
+		kind := ledger.Kind(entryType)
+		if kind != ledger.Income && kind != ledger.Expense {
+			return ledger.Snapshot{}, fmt.Errorf("entry %s: unknown entry_type %q", id, entryType)
 		}
 
 		snapshot.Entries = append(snapshot.Entries, ledger.Entry{
@@ -208,9 +226,9 @@ func (s *SQLiteStorage) Save(snapshot ledger.Snapshot) error {
 		return err
 	}
 
-	insert := `INSERT INTO entries (id, date, description, category, amount, entry_type) VALUES (?, ?, ?, ?, ?, ?)`
+	insert := `INSERT INTO entries (id, date, description, category, amount, amount_cents, entry_type) VALUES (?, ?, ?, ?, ?, ?, ?)`
 	if s.hasMonthKey {
-		insert = `INSERT INTO entries (id, date, description, category, amount, entry_type, month_key) VALUES (?, ?, ?, ?, ?, ?, ?)`
+		insert = `INSERT INTO entries (id, date, description, category, amount, amount_cents, entry_type, month_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	}
 
 	stmt, err := tx.Prepare(insert)
@@ -225,6 +243,7 @@ func (s *SQLiteStorage) Save(snapshot ledger.Snapshot) error {
 			e.Date.Format(dateLayout),
 			e.Description,
 			e.Category,
+			float64(e.Amount) / 100,
 			e.Amount,
 			string(e.Kind),
 		}

@@ -130,7 +130,10 @@ func FirstOfMonth(t time.Time) time.Time {
 }
 
 func AddMonths(t time.Time, months int) time.Time {
-	return t.AddDate(0, months, 0)
+	first := time.Date(t.Year(), t.Month()+time.Month(months), 1, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+	lastDay := first.AddDate(0, 1, -1).Day()
+	day := min(t.Day(), lastDay)
+	return first.AddDate(0, 0, day-1)
 }
 
 func PreviousMonth(t time.Time) time.Time {

@@ -21,7 +21,7 @@ type Entry struct {
 	Date        time.Time
 	Description string
 	Category    string
-	Amount      float64
+	Amount      int64
 	Kind        Kind
 }
 
@@ -32,17 +32,17 @@ type Category struct {
 }
 
 type Summary struct {
-	TotalIncome    float64
-	TotalExpenses  float64
-	Balance        float64
-	CategoryTotals map[string]float64
+	TotalIncome    int64
+	TotalExpenses  int64
+	Balance        int64
+	CategoryTotals map[string]int64
 }
 
 type ChartData struct {
 	Months   []string
-	Income   []float64
-	Expenses []float64
-	Balance  []float64
+	Income   []int64
+	Expenses []int64
+	Balance  []int64
 }
 
 type Snapshot struct {
@@ -128,12 +128,33 @@ func (l *Ledger) Add(e Entry) (Entry, error) {
 			e.Category = cats[0].Name
 		}
 	}
+	if err := validate(e); err != nil {
+		return Entry{}, err
+	}
+	for _, existing := range l.entries {
+		if existing.ID == e.ID {
+			return Entry{}, fmt.Errorf("duplicate entry id: %s", e.ID)
+		}
+	}
 
 	l.entries = append(l.entries, e)
 	return e, l.persist()
 }
 
+func validate(e Entry) error {
+	if e.Kind != Income && e.Kind != Expense {
+		return fmt.Errorf("unknown kind: %q", e.Kind)
+	}
+	if e.Amount < 0 {
+		return fmt.Errorf("amount must not be negative: %d", e.Amount)
+	}
+	return nil
+}
+
 func (l *Ledger) Update(e Entry) error {
+	if err := validate(e); err != nil {
+		return err
+	}
 	for i, existing := range l.entries {
 		if existing.ID == e.ID {
 			l.entries[i] = e
@@ -165,7 +186,7 @@ func (l *Ledger) Categories(kind Kind) []Category {
 }
 
 func (l *Ledger) Summary(month time.Time) Summary {
-	s := Summary{CategoryTotals: make(map[string]float64)}
+	s := Summary{CategoryTotals: make(map[string]int64)}
 
 	for _, e := range l.entries {
 		if !sameMonth(e.Date, month) {
@@ -184,17 +205,17 @@ func (l *Ledger) Summary(month time.Time) Summary {
 }
 
 func (l *Ledger) ChartSeries(endMonth time.Time, n int) ChartData {
+	if n <= 0 {
+		return ChartData{}
+	}
 	data := ChartData{
 		Months:   make([]string, 0, n),
-		Income:   make([]float64, 0, n),
-		Expenses: make([]float64, 0, n),
-		Balance:  make([]float64, 0, n),
-	}
-	if n <= 0 {
-		return data
+		Income:   make([]int64, 0, n),
+		Expenses: make([]int64, 0, n),
+		Balance:  make([]int64, 0, n),
 	}
 
-	running := 0.0
+	var running int64
 	for i := n - 1; i >= 0; i-- {
 		month := utils.AddMonths(utils.FirstOfMonth(endMonth), -i)
 		summary := l.Summary(month)
@@ -209,8 +230,8 @@ func (l *Ledger) ChartSeries(endMonth time.Time, n int) ChartData {
 	return data
 }
 
-func (l *Ledger) TotalBalance() float64 {
-	var total float64
+func (l *Ledger) TotalBalance() int64 {
+	var total int64
 	for _, e := range l.entries {
 		if e.Kind == Income {
 			total += e.Amount

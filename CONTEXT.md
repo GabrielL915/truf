@@ -6,6 +6,8 @@ TRUF is a terminal app for tracking personal income and expenses month by month.
 
 **Entry** — a single income or expense. Carries `ID`, `Date`, `Description`, `Category`, `Amount` and `Kind`. An entry's month is *derived from its `Date`*; there is no separate month key. Editing a date into another month moves the entry to that month.
 
+**Amount** — `int64` **cents**, never a float. Always non-negative; direction comes from `Kind`. The Ledger rejects negative amounts, unknown kinds and duplicate IDs. `utils.FormatCurrency` renders pt-BR style (`$1.234,56`); `utils.ParseCurrency` accepts both `1.234,56` and `1,234.56`, where the *last* separator is the decimal one and a lone `,` is always decimal (`1,5` = 1.50). SQLite stores `amount_cents INTEGER`; the legacy `amount REAL` column is kept in sync for old readers and back-filled on first open.
+
 **Kind** — `Income` or `Expense`. One field on `Entry` instead of two parallel collections, so there is a single code path per operation.
 
 **Category** — `Name`, `Kind`, `Order`. Categories are global, not per-month. They are a convenience for defaulting and display: an entry's `Category` is free text and is never validated against the list.
