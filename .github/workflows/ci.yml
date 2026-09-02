@@ -32,7 +32,7 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: knowledge base check
-        run: scripts/kb.sh check
+        run: bash scripts/kb.sh check
       - name: go mod tidy check
         run: |
           go mod tidy
