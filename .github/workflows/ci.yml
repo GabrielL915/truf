@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "Files not gofmt'd:"; echo "$out"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  test:
+    name: Test (${{ matrix.os }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Test (race)
+        if: runner.os == 'Linux'
+        run: go test -race -count=1 ./...
+
+  perf:
+    name: Perf (benchmarks, budgets, binary size)
+    needs: lint
+    runs-on: ubuntu-latest
+    env:
+      MAX_BINARY_BYTES: "12000000" # stripped, pure-Go sqlite; ~8 MB today
+      BENCH_FLAGS: -run '^$' -bench . -benchmem -benchtime=300ms -count=5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Binary size gate
+        run: |
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/truf ./cmd/truf
+          size=$(stat -c%s dist/truf)
+          echo "## Binary size" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`truf\` (linux/amd64, stripped): **$(numfmt --to=iec-i --suffix=B "$size")** (limit $(numfmt --to=iec-i --suffix=B "$MAX_BINARY_BYTES"))" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$size" -gt "$MAX_BINARY_BYTES" ]; then
+            echo "::error::binary is $size bytes, over the $MAX_BINARY_BYTES limit"; exit 1
+          fi
+
+      - name: Perf budgets (strict)
+        env:
+          TRUF_PERF_STRICT: "1"
+        run: go test -count=1 -run 'PerfBudget' -v ./internal/ui/ 2>&1 | tee budgets.txt
+      - name: Budgets summary
+        if: always()
+        run: |
+          echo "## Frame budgets (strict, 10k entries)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -E "frame median|PASS|FAIL" budgets.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Benchmarks (head)
+        run: go test $BENCH_FLAGS ./... | tee bench-head.txt
+
+      - name: Benchmarks (base)
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add ../base "${{ github.event.pull_request.base.sha }}"
+          (cd ../base && go test $BENCH_FLAGS ./... 2>/dev/null) | tee bench-base.txt || true
+
+      - name: Compare with benchstat
+        if: always()
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          echo "## Benchmarks" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ -s bench-base.txt ] && grep -q '^Benchmark' bench-base.txt; then
+            benchstat -alpha 0.05 base=bench-base.txt head=bench-head.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            benchstat bench-head.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: bench-*.txt
