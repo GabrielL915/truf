@@ -54,3 +54,17 @@ pkg/utils         date and currency helpers
 ```sh
 go test ./...
 ```
+
+## Knowledge base
+
+Decisions, conventions, gotchas and open issues are indexed in `docs/knowledge/truf.jsonl`
+(one JSON object per line). Query it before digging through code:
+
+```sh
+scripts/kb.sh search sqlite save     # one line per hit
+scripts/kb.sh show decision.int-cents
+scripts/kb.sh add --id x.y --type decision --topic money --summary "..." --refs pkg/utils/currency.go
+scripts/kb.sh help
+```
+
+Requires `jq`. Specs live in `docs/specs/` and are never deleted; each one gets a `spec.*` entry.
