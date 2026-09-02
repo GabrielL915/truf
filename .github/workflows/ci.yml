@@ -108,7 +108,8 @@ jobs:
       - name: Compare with benchstat
         if: always()
         run: |
-          go install golang.org/x/perf/cmd/benchstat@latest
+          # benchstat@latest needs a newer Go than go.mod; let go fetch that toolchain just for this install
+          GOTOOLCHAIN=auto go install golang.org/x/perf/cmd/benchstat@latest
           echo "## Benchmarks" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           if [ -s bench-base.txt ] && grep -q '^Benchmark' bench-base.txt; then
