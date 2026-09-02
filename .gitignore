@@ -4,3 +4,4 @@ truf.exe
 node_modules/
 .claude/worktrees/
 chaos-reports/
+docs/specs/

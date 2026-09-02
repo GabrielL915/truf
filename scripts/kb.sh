@@ -12,6 +12,7 @@
 #   kb.sh refs <path-fragment>      entries that reference a file
 #   kb.sh add --id X --type T --topic P --summary S [--detail D] [--tags a,b] [--refs p1,p2]
 #   kb.sh validate                  JSON well-formed, required fields, unique ids
+#   kb.sh check                     validate + every ref exists in the tree (CI gate)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -105,7 +106,19 @@ case "$cmd" in
     if [ -n "$dups" ]; then echo "duplicate ids:" >&2; echo "$dups" >&2; bad=$((bad+1)); fi
     if [ "$bad" -eq 0 ]; then echo "ok: $n entries, ids unique"; else exit 1; fi
     ;;
+  check)
+    # CI gate: validate + every ref exists in the tree (or is gitignored, e.g. local-only reports/specs)
+    "$0" validate
+    bad=0
+    while IFS=$'\t' read -r id ref; do
+      ref="${ref%$'\r'}"
+      [ -e "$ROOT/$ref" ] && continue
+      if git -C "$ROOT" check-ignore -q "$ref" 2>/dev/null; then continue; fi
+      echo "$id: ref '$ref' does not exist" >&2; bad=$((bad+1))
+    done < <("$JQ" -r '.id as $id | .refs[] | [$id, .] | @tsv' "$KB")
+    if [ "$bad" -eq 0 ]; then echo "ok: all refs resolve"; else exit 1; fi
+    ;;
   help|-h|--help|*)
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     ;;
 esac
