@@ -77,6 +77,12 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "[", "h":
+		return m.handleMonthShift(-1)
+
+	case "]", "l":
+		return m.handleMonthShift(1)
+
 	case "enter":
 		return m.handleEnter()
 
@@ -105,6 +111,14 @@ func (m *Model) handleDown() (tea.Model, tea.Cmd) {
 	} else if t := m.activeTable(); t != nil {
 		t.Down()
 	}
+	return m, nil
+}
+
+func (m *Model) handleMonthShift(delta int) (tea.Model, tea.Cmd) {
+	if m.focusedPanel != PanelContent || m.activeTable() == nil {
+		return m, nil
+	}
+	m.shiftMonth(delta)
 	return m, nil
 }
 
