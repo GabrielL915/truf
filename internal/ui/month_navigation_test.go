@@ -50,7 +50,7 @@ func TestMonthNavigationPreviousShowsOlderEntries(t *testing.T) {
 		t.Errorf("cursor = %d, want 0 after month change", m.incomeTable.Cursor)
 	}
 	view := m.View()
-	if !strings.Contains(view, "Income — Feb 2026") {
+	if !strings.Contains(view, "Income · 2 entries · February 2026") {
 		t.Errorf("view lacks month in title:\n%s", view)
 	}
 	key(m, "esc")
@@ -80,11 +80,11 @@ func TestMonthNavigationNextAndNewEntryDate(t *testing.T) {
 
 	key(m, "h")
 	key(m, "h")
-	if !strings.Contains(m.View(), "Income — Feb 2026") {
+	if !strings.Contains(m.View(), "Income · 2 entries · February 2026") {
 		t.Errorf("h should move back two months to Feb 2026")
 	}
 	key(m, "l")
-	if !strings.Contains(m.View(), "Income — Mar 2026") {
+	if !strings.Contains(m.View(), "Income · 1 entry · March 2026") {
 		t.Errorf("l should move forward to Mar 2026")
 	}
 }

@@ -2,14 +2,25 @@ package components
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/gabriel-luiz/truf/internal/ledger"
 	"github.com/gabriel-luiz/truf/internal/ui/styles"
 	"github.com/gabriel-luiz/truf/pkg/utils"
+)
+
+const (
+	tableChromeLines = 5
+	dateWidth        = 5
+	categoryWidth    = 18
+	amountWidth      = 14
+	cellGap          = 2
+	distributionTop  = 5
 )
 
 type EntryTable struct {
@@ -26,16 +37,13 @@ type EntryTable struct {
 	EditingColumn int
 	EditBuffer    string
 	originalEntry *ledger.Entry
-
-	colWidths []int
 }
 
 func NewEntryTable(title string, kind ledger.Kind) *EntryTable {
 	return &EntryTable{
-		Title:     title,
-		Kind:      kind,
-		Entries:   make([]ledger.Entry, 0),
-		colWidths: []int{12, 30, 15, 12},
+		Title:   title,
+		Kind:    kind,
+		Entries: make([]ledger.Entry, 0),
 	}
 }
 
@@ -84,12 +92,6 @@ func (t *EntryTable) Current() (ledger.Entry, bool) {
 func (t *EntryTable) SetSize(width, height int) {
 	t.Width = width
 	t.Height = height
-
-	available := width - 4
-	t.colWidths = []int{12, available - 46, 18, 14}
-	if t.colWidths[1] < 15 {
-		t.colWidths[1] = 15
-	}
 }
 
 func (t *EntryTable) Up() {
@@ -206,120 +208,169 @@ func (t *EntryTable) Backspace() {
 }
 
 func (t *EntryTable) View() string {
-	var sb strings.Builder
+	lines := make([]string, 0, t.Height)
+	lines = append(lines, t.renderTitleLine(), t.renderColumnHeaders(), t.rule())
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome()))
-	sb.WriteString(titleStyle.Render(t.title()))
-	sb.WriteString("\n\n")
-
-	sb.WriteString(t.renderHeader())
-	sb.WriteString("\n")
-
-	totalWidth := 0
-	for _, w := range t.colWidths {
-		totalWidth += w + 1
-	}
-	sb.WriteString(styles.ChromeStyle.Render(strings.Repeat("─", totalWidth)))
-	sb.WriteString("\n")
-
+	rows := max(t.Height-tableChromeLines, 1)
 	if len(t.Entries) == 0 {
-		sb.WriteString(lipgloss.NewStyle().
-			Foreground(styles.Muted).
-			Italic(true).
-			Render("No entries. Press 'n' to add one."))
+		lines = append(lines, " "+styles.MutedStyle.Render(
+			fmt.Sprintf("No entries in %s. Press n to add one.", utils.FormatMonthYearFull(t.Month))))
 	} else {
-		maxRows := t.Height - 7
-		if maxRows < 5 {
-			maxRows = 5
-		}
-
-		start := 0
-		if t.Cursor >= maxRows {
-			start = t.Cursor - maxRows + 1
-		}
-
-		end := start + maxRows
-		if end > len(t.Entries) {
-			end = len(t.Entries)
-		}
-
+		start, end := t.window(rows)
 		for i := start; i < end; i++ {
-			sb.WriteString(t.renderRow(i))
-			sb.WriteString("\n")
+			lines = append(lines, t.renderRow(i))
 		}
+		for len(lines) < t.Height-2 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, t.rule(), t.renderFooter(start, end))
 	}
-
-	sb.WriteString("\n")
-	totalStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome()))
-	sb.WriteString(fmt.Sprintf("Total: %s", totalStyle.Render(utils.FormatCurrency(t.total()))))
 
 	return lipgloss.NewStyle().
 		Width(t.Width).
 		Height(t.Height).
 		MaxHeight(t.Height).
-		Render(sb.String())
+		Render(strings.Join(lines, "\n"))
 }
 
-func (t *EntryTable) title() string {
-	if t.Month.IsZero() {
-		return t.Title
+func (t *EntryTable) window(rows int) (start, end int) {
+	if t.Cursor >= rows {
+		start = t.Cursor - rows + 1
 	}
-	return t.Title + " — " + t.Month.Format("Jan 2006")
+	end = min(start+rows, len(t.Entries))
+	return start, end
 }
 
-func (t *EntryTable) renderHeader() string {
-	headers := []string{"Date", "Description", "Category", "Amount"}
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
+func (t *EntryTable) columnWidths() (date, description, category, amount int) {
+	fixed := 2 + dateWidth + cellGap + cellGap + categoryWidth + cellGap + amountWidth + 1
+	return dateWidth, max(t.Width-fixed, 10), categoryWidth, amountWidth
+}
 
-	var parts []string
-	for i, h := range headers {
-		parts = append(parts, headerStyle.Width(t.colWidths[i]).Render(h))
-	}
+func (t *EntryTable) renderTitleLine() string {
+	left := lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome())).Render(t.Title) +
+		styles.MutedStyle.Render(fmt.Sprintf(" · %s · %s", entries(len(t.Entries)), utils.FormatMonthYearFull(t.Month)))
+	right := styles.MutedStyle.Render("Total ") +
+		lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome())).Render(utils.FormatCurrency(t.total()))
+	gap := max(t.Width-2-lipgloss.Width(left)-lipgloss.Width(right), 1)
+	return " " + left + strings.Repeat(" ", gap) + right
+}
 
-	return strings.Join(parts, " ")
+func (t *EntryTable) renderColumnHeaders() string {
+	date, description, category, amount := t.columnWidths()
+	gap := strings.Repeat(" ", cellGap)
+	h := styles.MutedStyle
+	return "  " +
+		h.Width(date).Render("DATE") + gap +
+		h.Width(description).Render("DESCRIPTION") + gap +
+		h.Width(category).Render("CATEGORY") + gap +
+		h.Width(amount).Align(lipgloss.Right).Render("AMOUNT")
+}
+
+func (t *EntryTable) rule() string {
+	return " " + styles.ChromeStyle.Render(strings.Repeat("─", max(t.Width-2, 1)))
 }
 
 func (t *EntryTable) renderRow(idx int) string {
 	entry := t.Entries[idx]
-	isSelected := idx == t.Cursor
+	selected := idx == t.Cursor
+	editing := t.Editing && selected
+	date, description, category, amount := t.columnWidths()
+	widths := []int{date, description, category, amount}
 
 	cells := []string{
-		utils.FormatDate(entry.Date),
+		entry.Date.Format("02/01"),
 		entry.Description,
 		entry.Category,
 		utils.FormatCurrency(entry.Amount),
 	}
 
-	var parts []string
-	for col, value := range cells {
-		editingCell := t.Editing && isSelected && t.EditingColumn == col
-		if editingCell {
-			value = t.EditBuffer + "▏"
-		}
+	base := styles.TextStyle
+	marker := "  "
+	switch {
+	case editing:
+		base = styles.MutedStyle
+		marker = styles.AccentStyle.Render("▌") + " "
+	case selected:
+		base = lipgloss.NewStyle().Background(styles.Surface).Foreground(styles.Text)
+		marker = styles.AccentStyle.Background(styles.Surface).Render("▌") + base.Render(" ")
+	}
 
-		style := t.getCellStyle(isSelected, editingCell)
-		if col == 3 && !editingCell {
+	parts := make([]string, 0, len(cells))
+	for col, value := range cells {
+		style := base
+		if editing && t.EditingColumn == col {
+			value = t.EditBuffer + "▏"
+			style = lipgloss.NewStyle().Background(styles.Accent).Foreground(styles.OnAccent)
+		} else if col == 3 {
 			style = style.Foreground(styles.KindColor(t.isIncome()))
 		}
-
-		parts = append(parts, style.Width(t.colWidths[col]).Render(truncate(value, t.colWidths[col])))
+		if col == 3 {
+			style = style.Align(lipgloss.Right)
+		}
+		parts = append(parts, style.Width(widths[col]).Render(ansi.Truncate(value, widths[col], "…")))
 	}
 
-	return strings.Join(parts, " ")
+	row := marker + strings.Join(parts, base.Render(strings.Repeat(" ", cellGap)))
+	if pad := t.Width - lipgloss.Width(row); pad > 0 {
+		row += base.Render(strings.Repeat(" ", pad))
+	}
+	return row
 }
 
-func (t *EntryTable) getCellStyle(selected, editing bool) lipgloss.Style {
-	if editing {
-		return lipgloss.NewStyle().
-			Background(styles.Accent).
-			Foreground(styles.OnAccent)
+func (t *EntryTable) renderFooter(start, end int) string {
+	right := ""
+	if len(t.Entries) > end-start {
+		right = styles.MutedStyle.Render(fmt.Sprintf("%d–%d of %d", start+1, end, len(t.Entries)))
 	}
-	if selected {
-		return lipgloss.NewStyle().
-			Background(styles.Surface).
-			Foreground(styles.Text)
+	room := t.Width - 2 - lipgloss.Width(right)
+	if right != "" {
+		room -= cellGap
 	}
-	return lipgloss.NewStyle().Foreground(styles.Text)
+	left := styles.MutedStyle.Render(ansi.Truncate(t.distribution(), max(room, 0), "…"))
+	gap := max(t.Width-2-lipgloss.Width(left)-lipgloss.Width(right), 0)
+	return " " + left + strings.Repeat(" ", gap) + right
+}
+
+type share struct {
+	name   string
+	amount int64
+}
+
+func (t *EntryTable) distribution() string {
+	total := t.total()
+	if total == 0 {
+		return ""
+	}
+	byCategory := map[string]int64{}
+	for _, e := range t.Entries {
+		name := e.Category
+		if name == "" {
+			name = "Uncategorised"
+		}
+		byCategory[name] += e.Amount
+	}
+	shares := make([]share, 0, len(byCategory))
+	for name, amount := range byCategory {
+		shares = append(shares, share{name, amount})
+	}
+	sort.Slice(shares, func(i, j int) bool {
+		if shares[i].amount != shares[j].amount {
+			return shares[i].amount > shares[j].amount
+		}
+		return shares[i].name < shares[j].name
+	})
+	if len(shares) > distributionTop+1 {
+		var other int64
+		for _, s := range shares[distributionTop:] {
+			other += s.amount
+		}
+		shares = append(shares[:distributionTop], share{"Other", other})
+	}
+	parts := make([]string, 0, len(shares))
+	for _, s := range shares {
+		parts = append(parts, fmt.Sprintf("%s %d%%", s.name, (s.amount*100+total/2)/total))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (t *EntryTable) total() int64 {
@@ -328,14 +379,4 @@ func (t *EntryTable) total() int64 {
 		total += e.Amount
 	}
 	return total
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }
