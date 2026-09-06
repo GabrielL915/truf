@@ -99,9 +99,18 @@ func (m *Model) refreshChart() {
 func (m *Model) refreshTables() {
 	for _, kind := range []ledger.Kind{ledger.Income, ledger.Expense} {
 		t := m.table(kind)
+		t.SetMonth(m.month)
 		t.SetEntries(m.ledger.Entries(m.month, kind))
 		t.SetCategories(categoryNames(m.ledger.Categories(kind)))
 	}
+}
+
+func (m *Model) shiftMonth(delta int) {
+	m.month = utils.AddMonths(m.month, delta)
+	m.incomeTable.ResetCursor()
+	m.expenseTable.ResetCursor()
+	m.refreshTables()
+	m.refreshChart()
 }
 
 func (m *Model) setErr(err error) {

@@ -3,6 +3,7 @@ package components
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
@@ -14,6 +15,7 @@ import (
 type EntryTable struct {
 	Title      string
 	Kind       ledger.Kind
+	Month      time.Time
 	Entries    []ledger.Entry
 	Categories []string
 	Cursor     int
@@ -54,6 +56,14 @@ func (t *EntryTable) SetEntries(entries []ledger.Entry) {
 
 func (t *EntryTable) SetCategories(categories []string) {
 	t.Categories = categories
+}
+
+func (t *EntryTable) SetMonth(month time.Time) {
+	t.Month = month
+}
+
+func (t *EntryTable) ResetCursor() {
+	t.Cursor = 0
 }
 
 func (t *EntryTable) SelectByID(id string) {
@@ -205,7 +215,7 @@ func (t *EntryTable) View() string {
 	} else {
 		titleStyle = titleStyle.Foreground(styles.Danger)
 	}
-	sb.WriteString(titleStyle.Render(t.Title))
+	sb.WriteString(titleStyle.Render(t.title()))
 	sb.WriteString("\n\n")
 
 	sb.WriteString(t.renderHeader())
@@ -255,7 +265,7 @@ func (t *EntryTable) View() string {
 	sb.WriteString(fmt.Sprintf("Total: %s", totalStyle.Render(utils.FormatCurrency(t.total()))))
 
 	sb.WriteString("\n\n")
-	sb.WriteString(styles.HelpStyle.Render("↑↓:navigate  Enter:edit  n:new  d:delete  Esc:back"))
+	sb.WriteString(styles.HelpStyle.Render("↑↓:navigate  [ ]:month  Enter:edit  n:new  d:delete  Esc:back"))
 
 	panelStyle := styles.PanelStyle
 	if t.Focused {
@@ -266,6 +276,13 @@ func (t *EntryTable) View() string {
 		Width(t.Width - 2).
 		Height(t.Height - 2).
 		Render(sb.String())
+}
+
+func (t *EntryTable) title() string {
+	if t.Month.IsZero() {
+		return t.Title
+	}
+	return t.Title + " — " + t.Month.Format("Jan 2006")
 }
 
 func (t *EntryTable) renderHeader() string {

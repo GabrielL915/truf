@@ -25,6 +25,7 @@ go run ./cmd/truf --seed
 | `Tab` | switch between menu and content |
 | `↑` `↓` / `k` `j` | navigate |
 | `Enter` | open a view, or start editing a row |
+| `[` `]` / `h` `l` | previous / next month (Income and Expenses) |
 | `n` | new entry |
 | `d` | delete entry |
 | `Esc` | back to Overview |
