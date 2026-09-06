@@ -12,8 +12,10 @@ import (
 	"github.com/gabriel-luiz/truf/internal/ui"
 )
 
+const dbPath = "~/.truf/truf.db"
+
 func main() {
-	store, err := storage.NewSQLiteStorage("~/.truf/truf.db")
+	store, err := storage.NewSQLiteStorage(dbPath)
 	if err != nil {
 		fail("Error initializing storage: %v", err)
 	}
@@ -32,7 +34,10 @@ func main() {
 		return
 	}
 
-	p := tea.NewProgram(ui.NewModel(book), tea.WithAltScreen())
+	model := ui.NewModel(book)
+	model.SetStorageLabel(dbPath)
+
+	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fail("Error running program: %v", err)
 	}

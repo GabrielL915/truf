@@ -41,27 +41,17 @@ func (c *Chart) View() string {
 }
 
 func (c *Chart) renderEmpty() string {
-	content := lipgloss.NewStyle().
-		Foreground(styles.TextMuted).
+	return styles.MutedStyle.
+		Width(c.Width).
+		Height(c.Height).
+		MaxHeight(c.Height).
 		Render("No data available.\nAdd income or expenses to see your balance chart.")
-
-	return c.panelStyle().
-		Width(c.Width - 2).
-		Height(c.Height - 2).
-		Render(content)
-}
-
-func (c *Chart) panelStyle() lipgloss.Style {
-	if c.Focused {
-		return styles.FocusedPanelStyle
-	}
-	return styles.PanelStyle
 }
 
 func (c *Chart) renderChart() string {
 	var sb strings.Builder
 
-	title := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true).Render("Balance Over Time")
+	title := styles.TitleStyle.Render("Balance Over Time")
 	summary := ""
 	if n := len(c.Data.Balance); n > 0 {
 		last := c.Data.Balance[n-1]
@@ -74,8 +64,8 @@ func (c *Chart) renderChart() string {
 	sb.WriteString(title + summary + "\n\n")
 
 	yLabelWidth := 9
-	chartW := c.Width - yLabelWidth - 6
-	chartH := c.Height - 9
+	chartW := c.Width - yLabelWidth - 2
+	chartH := c.Height - 6
 	if chartW < 10 {
 		chartW = 10
 	}
@@ -97,7 +87,7 @@ func (c *Chart) renderChart() string {
 	c.drawSeries(&cnv, toFloat(c.Data.Expenses), minX, maxX, minY, maxY,
 		lipgloss.NewStyle().Foreground(styles.Danger))
 	c.drawSeries(&cnv, toFloat(c.Data.Balance), minX, maxX, minY, maxY,
-		lipgloss.NewStyle().Foreground(styles.Accent))
+		lipgloss.NewStyle().Foreground(styles.Net))
 
 	canvasStr := cnv.View()
 	rows := strings.Split(strings.TrimRight(canvasStr, "\n"), "\n")
@@ -111,7 +101,7 @@ func (c *Chart) renderChart() string {
 		default:
 			yLabel = strings.Repeat(" ", yLabelWidth)
 		}
-		sb.WriteString(lipgloss.NewStyle().Foreground(styles.TextMuted).Render(yLabel))
+		sb.WriteString(styles.MutedStyle.Render(yLabel))
 		sb.WriteString(" ")
 		sb.WriteString(row)
 		sb.WriteString("\n")
@@ -122,9 +112,10 @@ func (c *Chart) renderChart() string {
 
 	sb.WriteString(c.renderLegend())
 
-	return c.panelStyle().
-		Width(c.Width - 2).
-		Height(c.Height - 2).
+	return lipgloss.NewStyle().
+		Width(c.Width).
+		Height(c.Height).
+		MaxHeight(c.Height).
 		Render(sb.String())
 }
 
@@ -235,6 +226,6 @@ func (c *Chart) renderXLabels(offset, chartW int) string {
 func (c *Chart) renderLegend() string {
 	income := lipgloss.NewStyle().Foreground(styles.Success).Render("⣿ Income")
 	expense := lipgloss.NewStyle().Foreground(styles.Danger).Render("⣿ Expenses")
-	balance := lipgloss.NewStyle().Foreground(styles.Accent).Render("⣿ Balance")
+	balance := lipgloss.NewStyle().Foreground(styles.Net).Render("⣿ Balance")
 	return fmt.Sprintf("\n%s  %s  %s", income, expense, balance)
 }

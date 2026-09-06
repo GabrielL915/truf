@@ -86,8 +86,8 @@ func (t *EntryTable) SetSize(width, height int) {
 	t.Width = width
 	t.Height = height
 
-	available := width - 10
-	t.colWidths = []int{12, available - 50, 18, 14}
+	available := width - 4
+	t.colWidths = []int{12, available - 46, 18, 14}
 	if t.colWidths[1] < 15 {
 		t.colWidths[1] = 15
 	}
@@ -209,12 +209,7 @@ func (t *EntryTable) Backspace() {
 func (t *EntryTable) View() string {
 	var sb strings.Builder
 
-	titleStyle := styles.MenuTitleStyle
-	if t.isIncome() {
-		titleStyle = titleStyle.Foreground(styles.Success)
-	} else {
-		titleStyle = titleStyle.Foreground(styles.Danger)
-	}
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome()))
 	sb.WriteString(titleStyle.Render(t.title()))
 	sb.WriteString("\n\n")
 
@@ -225,16 +220,16 @@ func (t *EntryTable) View() string {
 	for _, w := range t.colWidths {
 		totalWidth += w + 1
 	}
-	sb.WriteString(lipgloss.NewStyle().Foreground(styles.Muted).Render(strings.Repeat("─", totalWidth)))
+	sb.WriteString(styles.ChromeStyle.Render(strings.Repeat("─", totalWidth)))
 	sb.WriteString("\n")
 
 	if len(t.Entries) == 0 {
 		sb.WriteString(lipgloss.NewStyle().
-			Foreground(styles.TextMuted).
+			Foreground(styles.Muted).
 			Italic(true).
 			Render("No entries. Press 'n' to add one."))
 	} else {
-		maxRows := t.Height - 10
+		maxRows := t.Height - 7
 		if maxRows < 5 {
 			maxRows = 5
 		}
@@ -256,25 +251,13 @@ func (t *EntryTable) View() string {
 	}
 
 	sb.WriteString("\n")
-	totalStyle := lipgloss.NewStyle().Bold(true)
-	if t.isIncome() {
-		totalStyle = totalStyle.Foreground(styles.Success)
-	} else {
-		totalStyle = totalStyle.Foreground(styles.Danger)
-	}
+	totalStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.KindColor(t.isIncome()))
 	sb.WriteString(fmt.Sprintf("Total: %s", totalStyle.Render(utils.FormatCurrency(t.total()))))
 
-	sb.WriteString("\n\n")
-	sb.WriteString(styles.HelpStyle.Render("↑↓:navigate  [ ]:month  Enter:edit  n:new  d:delete  Esc:back"))
-
-	panelStyle := styles.PanelStyle
-	if t.Focused {
-		panelStyle = styles.FocusedPanelStyle
-	}
-
-	return panelStyle.
-		Width(t.Width - 2).
-		Height(t.Height - 2).
+	return lipgloss.NewStyle().
+		Width(t.Width).
+		Height(t.Height).
+		MaxHeight(t.Height).
 		Render(sb.String())
 }
 
@@ -287,7 +270,7 @@ func (t *EntryTable) title() string {
 
 func (t *EntryTable) renderHeader() string {
 	headers := []string{"Date", "Description", "Category", "Amount"}
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Primary)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(styles.Accent)
 
 	var parts []string
 	for i, h := range headers {
@@ -317,11 +300,7 @@ func (t *EntryTable) renderRow(idx int) string {
 
 		style := t.getCellStyle(isSelected, editingCell)
 		if col == 3 && !editingCell {
-			if t.isIncome() {
-				style = style.Foreground(styles.Success)
-			} else {
-				style = style.Foreground(styles.Danger)
-			}
+			style = style.Foreground(styles.KindColor(t.isIncome()))
 		}
 
 		parts = append(parts, style.Width(t.colWidths[col]).Render(truncate(value, t.colWidths[col])))
@@ -333,8 +312,8 @@ func (t *EntryTable) renderRow(idx int) string {
 func (t *EntryTable) getCellStyle(selected, editing bool) lipgloss.Style {
 	if editing {
 		return lipgloss.NewStyle().
-			Background(styles.Primary).
-			Foreground(styles.Background)
+			Background(styles.Accent).
+			Foreground(styles.OnAccent)
 	}
 	if selected {
 		return lipgloss.NewStyle().

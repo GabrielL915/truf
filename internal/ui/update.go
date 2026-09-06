@@ -15,9 +15,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyPress(msg)
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.updateSizes()
+		m.resize(msg.Width, msg.Height)
 		return m, nil
 	}
 
@@ -25,6 +23,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.setErr(nil)
+
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+	if m.layout.tooSmall {
+		if msg.String() == "q" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if t := m.activeTable(); t != nil && t.Editing {
 		return m.handleTableEdit(msg, t)
 	}
@@ -35,9 +45,6 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
-
-	case "ctrl+c":
-		return m, tea.Quit
 
 	case "tab":
 		if m.focusedPanel == PanelMenu {
@@ -190,7 +197,6 @@ func (m *Model) handleTableEdit(msg tea.KeyMsg, t *components.EntryTable) (tea.M
 			m.setErr(err)
 			return m, nil
 		}
-		m.setErr(nil)
 		if !t.Editing {
 			m.commitEdit(t)
 		}

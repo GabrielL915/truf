@@ -1,31 +1,37 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/gabriel-luiz/truf/internal/ui/styles"
 )
 
 func (m *Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	l := m.layout
+	if l.width == 0 || l.height == 0 {
 		return "Loading..."
 	}
+	if l.tooSmall {
+		return m.renderTooSmall()
+	}
 
-	leftPanel := m.menu.View()
-	rightPanel := m.renderRightPanel()
+	content := lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), m.renderContent())
 
-	mainArea := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	m.helpBar.SetHints(m.hints())
 
-	statusBar := m.statusBar.View()
-
-	fullView := lipgloss.JoinVertical(lipgloss.Left, mainArea, statusBar)
-
-	return styles.BaseStyle.Render(fullView)
+	return fit(m.renderTabBar(), l.width, tabBarHeight) + "\n" +
+		fit(content, l.width, l.contentHeight) + "\n" +
+		fit(m.helpBar.View(), l.width, helpBarHeight)
 }
 
-func (m *Model) renderRightPanel() string {
+func (m *Model) renderTabBar() string {
+	return styles.BarStyle.Width(m.layout.width).Render(" " + styles.Logo())
+}
+
+func (m *Model) renderContent() string {
 	switch m.currentView {
-	case ViewOverview:
-		return m.chart.View()
 	case ViewIncome:
 		return m.incomeTable.View()
 	case ViewExpenses:
@@ -40,20 +46,29 @@ func (m *Model) renderRightPanel() string {
 }
 
 func (m *Model) renderPlaceholder(title, message string) string {
-	leftWidth := m.width * 25 / 100
-	rightWidth := m.width - leftWidth
-	mainHeight := m.height - 3
+	return lipgloss.NewStyle().
+		Width(m.layout.mainWidth).
+		Height(m.layout.contentHeight).
+		Render(styles.TitleStyle.Render(title) + "\n\n" + styles.MutedStyle.Render(message))
+}
 
-	content := lipgloss.NewStyle().
-		Foreground(styles.Primary).
-		Bold(true).
-		Render(title) + "\n\n" +
-		lipgloss.NewStyle().
-			Foreground(styles.TextMuted).
-			Render(message)
+func (m *Model) renderTooSmall() string {
+	msg := styles.MutedStyle.Render("Terminal too small: TRUF needs at least 80×24.")
+	return lipgloss.Place(m.layout.width, m.layout.height, lipgloss.Center, lipgloss.Center, msg)
+}
 
-	return styles.PanelStyle.
-		Width(rightWidth - 2).
-		Height(mainHeight - 2).
-		Render(content)
+func fit(block string, width, height int) string {
+	lines := strings.Split(block, "\n")
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for i, line := range lines {
+		if lipgloss.Width(line) > width {
+			lines[i] = ansi.Truncate(line, width, "")
+		}
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
 }

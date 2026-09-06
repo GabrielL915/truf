@@ -32,7 +32,7 @@ type Model struct {
 
 	menu         *components.Menu
 	chart        *components.Chart
-	statusBar    *components.StatusBar
+	helpBar      *components.HelpBar
 	incomeTable  *components.EntryTable
 	expenseTable *components.EntryTable
 
@@ -40,8 +40,7 @@ type Model struct {
 	currentView  ViewType
 	chartMonths  int
 
-	width  int
-	height int
+	layout layout
 
 	err error
 }
@@ -52,7 +51,7 @@ func NewModel(book *ledger.Ledger) *Model {
 		month:        utils.FirstOfMonth(book.Now()),
 		menu:         components.NewMenu(),
 		chart:        components.NewChart(),
-		statusBar:    components.NewStatusBar(),
+		helpBar:      components.NewHelpBar(),
 		incomeTable:  components.NewEntryTable("Income", ledger.Income),
 		expenseTable: components.NewEntryTable("Expenses", ledger.Expense),
 		focusedPanel: PanelMenu,
@@ -63,6 +62,10 @@ func NewModel(book *ledger.Ledger) *Model {
 	m.refreshChart()
 	m.refreshTables()
 	return m
+}
+
+func (m *Model) SetStorageLabel(label string) {
+	m.helpBar.StorageLabel = label
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -87,13 +90,7 @@ func (m *Model) activeTable() *components.EntryTable {
 }
 
 func (m *Model) refreshChart() {
-	data := m.ledger.ChartSeries(m.month, m.chartMonths)
-	m.chart.SetData(data)
-
-	if len(data.Months) > 0 {
-		m.statusBar.SetTimeRange(data.Months[0], data.Months[len(data.Months)-1])
-	}
-	m.statusBar.SetBalance(m.ledger.TotalBalance())
+	m.chart.SetData(m.ledger.ChartSeries(m.month, m.chartMonths))
 }
 
 func (m *Model) refreshTables() {
@@ -115,7 +112,7 @@ func (m *Model) shiftMonth(delta int) {
 
 func (m *Model) setErr(err error) {
 	m.err = err
-	m.statusBar.SetError(err)
+	m.helpBar.SetError(err)
 }
 
 func (m *Model) updateFocus() {
@@ -126,16 +123,15 @@ func (m *Model) updateFocus() {
 	m.expenseTable.Focused = contentFocused && m.currentView == ViewExpenses
 }
 
-func (m *Model) updateSizes() {
-	leftWidth := m.width * 25 / 100
-	rightWidth := m.width - leftWidth
-	mainHeight := m.height - 3
+func (m *Model) resize(width, height int) {
+	m.layout = computeLayout(width, height)
+	l := m.layout
 
-	m.menu.SetSize(leftWidth, mainHeight)
-	m.chart.SetSize(rightWidth, mainHeight)
-	m.incomeTable.SetSize(rightWidth, mainHeight)
-	m.expenseTable.SetSize(rightWidth, mainHeight)
-	m.statusBar.SetWidth(m.width)
+	m.menu.SetSize(l.menuWidth, l.contentHeight)
+	m.chart.SetSize(l.mainWidth, l.contentHeight)
+	m.incomeTable.SetSize(l.mainWidth, l.contentHeight)
+	m.expenseTable.SetSize(l.mainWidth, l.contentHeight)
+	m.helpBar.SetWidth(l.width)
 }
 
 func categoryNames(categories []ledger.Category) []string {

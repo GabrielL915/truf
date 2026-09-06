@@ -5,68 +5,49 @@ import (
 )
 
 var (
-	Primary    = lipgloss.Color("#FC9F5B")
-	Secondary  = lipgloss.Color("#FBD1A2")
-	Accent     = lipgloss.Color("#7DCFB6")
-	Success    = lipgloss.Color("#33CA7F")
-	Danger     = lipgloss.Color("#FF6B6B")
-	Muted      = lipgloss.Color("#666666")
-	Background = lipgloss.Color("#1E1E1E")
-	Surface    = lipgloss.Color("#2D2D2D")
-	Text       = lipgloss.Color("#FFFFFF")
-	TextMuted  = lipgloss.Color("#888888")
+	Accent  = lipgloss.Color("#FC9F5B")
+	Success = lipgloss.Color("#33CA7F")
+	Danger  = lipgloss.Color("#FF6B6B")
+	Net     = lipgloss.Color("#7DCFB6")
 
-	BaseStyle = lipgloss.NewStyle().
-			Background(Background).
-			Foreground(Text)
+	Text     = lipgloss.AdaptiveColor{Light: "#1A1A1A", Dark: "#F2F2F2"}
+	Muted    = lipgloss.AdaptiveColor{Light: "#6B6B6B", Dark: "#8A8A8A"}
+	Chrome   = lipgloss.AdaptiveColor{Light: "#C4C4C4", Dark: "#4A4A4A"}
+	Surface  = lipgloss.AdaptiveColor{Light: "#E6E6E6", Dark: "#2D2D2D"}
+	OnAccent = lipgloss.Color("#1E1E1E")
 
-	PanelStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(Muted).
-			Padding(1)
+	TextStyle   = lipgloss.NewStyle().Foreground(Text)
+	MutedStyle  = lipgloss.NewStyle().Foreground(Muted)
+	ChromeStyle = lipgloss.NewStyle().Foreground(Chrome)
+	AccentStyle = lipgloss.NewStyle().Foreground(Accent)
+	TitleStyle  = lipgloss.NewStyle().Foreground(Accent).Bold(true)
+	DangerStyle = lipgloss.NewStyle().Foreground(Danger)
 
-	FocusedPanelStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(Primary).
-				Padding(1)
-
-	MenuItemStyle = lipgloss.NewStyle().
-			Foreground(Text).
-			PaddingLeft(2)
-
-	MenuItemSelectedStyle = lipgloss.NewStyle().
-				Foreground(Primary).
-				Bold(true).
-				PaddingLeft(1)
-
-	MenuTitleStyle = lipgloss.NewStyle().
-			Foreground(Primary).
-			Bold(true).
-			MarginBottom(1)
+	BarStyle = lipgloss.NewStyle().Background(Surface).Foreground(Text)
+	KeyStyle = lipgloss.NewStyle().Background(Surface).Foreground(Accent).Bold(true)
 
 	ChartIncomeColor  = Success
 	ChartExpenseColor = Danger
-	ChartBalanceColor = Accent
-
-	StatusBarStyle = lipgloss.NewStyle().
-			Background(Surface).
-			Foreground(Text).
-			Padding(0, 1)
-
-	StatusKeyStyle = lipgloss.NewStyle().
-			Foreground(Primary).
-			Bold(true)
-
-	StatusValueStyle = lipgloss.NewStyle().
-				Foreground(Text)
-
-	HelpStyle = lipgloss.NewStyle().
-			Foreground(TextMuted)
+	ChartBalanceColor = Net
 )
 
+func KindColor(income bool) lipgloss.TerminalColor {
+	if income {
+		return Success
+	}
+	return Danger
+}
+
+func SignColor(v int64) lipgloss.TerminalColor {
+	switch {
+	case v > 0:
+		return Success
+	case v < 0:
+		return Danger
+	}
+	return Text
+}
+
 func Logo() string {
-	return lipgloss.NewStyle().
-		Foreground(Primary).
-		Bold(true).
-		Render("TRUF")
+	return TitleStyle.Render("TRUF")
 }

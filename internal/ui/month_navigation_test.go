@@ -53,8 +53,9 @@ func TestMonthNavigationPreviousShowsOlderEntries(t *testing.T) {
 	if !strings.Contains(view, "Income — Feb 2026") {
 		t.Errorf("view lacks month in title:\n%s", view)
 	}
-	if !strings.HasSuffix(m.statusBar.TimeRange, "Feb 26") {
-		t.Errorf("chart range = %q, want it to end in Feb 26", m.statusBar.TimeRange)
+	key(m, "esc")
+	if view = frameText(m); !strings.Contains(view, "Feb 26") {
+		t.Errorf("chart axis should end in Feb 26:\n%s", view)
 	}
 }
 

@@ -61,36 +61,26 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) View() string {
 	var sb strings.Builder
 
-	title := styles.MenuTitleStyle.Render(styles.Logo())
-	sb.WriteString(title)
+	sb.WriteString(" " + styles.Logo())
 	sb.WriteString("\n\n")
 
 	for i, item := range m.Items {
 		var line string
-		if i == m.Selected {
-			cursor := ">"
-			if m.Focused {
-				cursor = lipgloss.NewStyle().Foreground(styles.Primary).Render(">")
-			}
-			line = cursor + " " + styles.MenuItemSelectedStyle.Render(item.Label)
-		} else {
-			line = styles.MenuItemStyle.Render(item.Label)
+		switch {
+		case i == m.Selected && m.Focused:
+			line = styles.AccentStyle.Render("▌") + styles.TitleStyle.Render(item.Label)
+		case i == m.Selected:
+			line = styles.ChromeStyle.Render("▌") + styles.AccentStyle.Render(item.Label)
+		default:
+			line = " " + styles.TextStyle.Render(item.Label)
 		}
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 
-	content := sb.String()
-
-	var panelStyle lipgloss.Style
-	if m.Focused {
-		panelStyle = styles.FocusedPanelStyle
-	} else {
-		panelStyle = styles.PanelStyle
-	}
-
-	return panelStyle.
-		Width(m.Width - 2).
-		Height(m.Height - 2).
-		Render(content)
+	return lipgloss.NewStyle().
+		Width(m.Width).
+		Height(m.Height).
+		MaxHeight(m.Height).
+		Render(sb.String())
 }
