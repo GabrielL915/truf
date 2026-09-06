@@ -19,7 +19,6 @@ type EntryTable struct {
 	Entries    []ledger.Entry
 	Categories []string
 	Cursor     int
-	Focused    bool
 	Width      int
 	Height     int
 

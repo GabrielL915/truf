@@ -48,21 +48,8 @@ func assertShape(t *testing.T, m *Model) []string {
 
 func TestShellFrameShapeOnEveryView(t *testing.T) {
 	m := sized(t, monthModel(t))
-	for _, open := range []func(){
-		func() {},
-		func() { key(m, "down"); key(m, "enter") },
-		func() { key(m, "esc"); key(m, "down"); key(m, "down"); key(m, "enter") },
-		func() { key(m, "esc"); key(m, "down"); key(m, "down"); key(m, "down"); key(m, "enter") },
-		func() {
-			key(m, "esc")
-			key(m, "down")
-			key(m, "down")
-			key(m, "down")
-			key(m, "down")
-			key(m, "enter")
-		},
-	} {
-		open()
+	for _, k := range []string{"1", "2", "3", "4", "5"} {
+		key(m, k)
 		lines := assertShape(t, m)
 		if !strings.Contains(lines[0], "TRUF") {
 			t.Errorf("first line is not the tab bar: %q", lines[0])
@@ -86,8 +73,7 @@ func TestShellErrorReplacesHelpBarUntilNextKey(t *testing.T) {
 	m, store := chaosModel(t)
 	sized(t, m)
 	store.SaveErr = errors.New("disk full")
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	key(m, "n")
 
 	lines := frame(m)
@@ -120,8 +106,7 @@ func TestShellTooSmallRendersGuardLine(t *testing.T) {
 	if strings.Contains(out, "Overview") {
 		t.Errorf("too-small view still renders the shell:\n%s", out)
 	}
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	if m.currentView != ViewOverview {
 		t.Errorf("keys should be ignored while too small")
 	}

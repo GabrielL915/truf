@@ -17,17 +17,11 @@ func (m *Model) View() string {
 		return m.renderTooSmall()
 	}
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top, m.menu.View(), m.renderContent())
-
 	m.helpBar.SetHints(m.hints())
 
-	return fit(m.renderTabBar(), l.width, tabBarHeight) + "\n" +
-		fit(content, l.width, l.contentHeight) + "\n" +
+	return fit(m.tabBar.View(), l.width, tabBarHeight) + "\n" +
+		fit(m.renderContent(), l.width, l.contentHeight) + "\n" +
 		fit(m.helpBar.View(), l.width, helpBarHeight)
-}
-
-func (m *Model) renderTabBar() string {
-	return styles.BarStyle.Width(m.layout.width).Render(" " + styles.Logo())
 }
 
 func (m *Model) renderContent() string {
@@ -47,8 +41,9 @@ func (m *Model) renderContent() string {
 
 func (m *Model) renderPlaceholder(title, message string) string {
 	return lipgloss.NewStyle().
-		Width(m.layout.mainWidth).
+		Width(m.layout.width).
 		Height(m.layout.contentHeight).
+		Padding(1, 2).
 		Render(styles.TitleStyle.Render(title) + "\n\n" + styles.MutedStyle.Render(message))
 }
 

@@ -83,8 +83,7 @@ func TestPerfBudgetOverviewFrame(t *testing.T) {
 func TestPerfBudgetTableFrame(t *testing.T) {
 	_, budget := budgets(t)
 	m := budgetModel(t)
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	got := medianFrame(m, budgetFrames)
 	t.Logf("table frame median: %v (budget %v, %d entries)", got, budget, budgetEntries)
 	if got > budget {

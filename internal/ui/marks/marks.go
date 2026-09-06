@@ -1,0 +1,3 @@
+package marks
+
+const Small = "⣠⣾⣷⣄"

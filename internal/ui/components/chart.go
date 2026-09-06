@@ -14,10 +14,9 @@ import (
 )
 
 type Chart struct {
-	Data    ledger.ChartData
-	Focused bool
-	Width   int
-	Height  int
+	Data   ledger.ChartData
+	Width  int
+	Height int
 }
 
 func NewChart() *Chart {

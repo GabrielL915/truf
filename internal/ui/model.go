@@ -9,13 +9,6 @@ import (
 	"github.com/gabriel-luiz/truf/pkg/utils"
 )
 
-type Panel int
-
-const (
-	PanelMenu Panel = iota
-	PanelContent
-)
-
 type ViewType int
 
 const (
@@ -24,21 +17,23 @@ const (
 	ViewExpenses
 	ViewCategories
 	ViewSettings
+	viewCount
 )
+
+var viewLabels = []string{"Overview", "Income", "Expenses", "Categories", "Settings"}
 
 type Model struct {
 	ledger *ledger.Ledger
 	month  time.Time
 
-	menu         *components.Menu
+	tabBar       *components.TabBar
 	chart        *components.Chart
 	helpBar      *components.HelpBar
 	incomeTable  *components.EntryTable
 	expenseTable *components.EntryTable
 
-	focusedPanel Panel
-	currentView  ViewType
-	chartMonths  int
+	currentView ViewType
+	chartMonths int
 
 	layout layout
 
@@ -49,16 +44,16 @@ func NewModel(book *ledger.Ledger) *Model {
 	m := &Model{
 		ledger:       book,
 		month:        utils.FirstOfMonth(book.Now()),
-		menu:         components.NewMenu(),
+		tabBar:       components.NewTabBar(viewLabels),
 		chart:        components.NewChart(),
 		helpBar:      components.NewHelpBar(),
 		incomeTable:  components.NewEntryTable("Income", ledger.Income),
 		expenseTable: components.NewEntryTable("Expenses", ledger.Expense),
-		focusedPanel: PanelMenu,
 		currentView:  ViewOverview,
 		chartMonths:  6,
 	}
 
+	m.tabBar.SetMonth(m.month)
 	m.refreshChart()
 	m.refreshTables()
 	return m
@@ -89,6 +84,25 @@ func (m *Model) activeTable() *components.EntryTable {
 	return nil
 }
 
+func (m *Model) setView(v ViewType) {
+	if v < 0 || v >= viewCount {
+		return
+	}
+	m.currentView = v
+	m.tabBar.SetActive(int(v))
+	switch v {
+	case ViewOverview:
+		m.refreshChart()
+	case ViewIncome, ViewExpenses:
+		m.refreshTables()
+	}
+}
+
+func (m *Model) cycleView(delta int) {
+	n := int(viewCount)
+	m.setView(ViewType((int(m.currentView) + delta + n) % n))
+}
+
 func (m *Model) refreshChart() {
 	m.chart.SetData(m.ledger.ChartSeries(m.month, m.chartMonths))
 }
@@ -104,6 +118,7 @@ func (m *Model) refreshTables() {
 
 func (m *Model) shiftMonth(delta int) {
 	m.month = utils.AddMonths(m.month, delta)
+	m.tabBar.SetMonth(m.month)
 	m.incomeTable.ResetCursor()
 	m.expenseTable.ResetCursor()
 	m.refreshTables()
@@ -115,22 +130,14 @@ func (m *Model) setErr(err error) {
 	m.helpBar.SetError(err)
 }
 
-func (m *Model) updateFocus() {
-	m.menu.Focused = m.focusedPanel == PanelMenu
-	contentFocused := m.focusedPanel == PanelContent
-	m.chart.Focused = contentFocused && m.currentView == ViewOverview
-	m.incomeTable.Focused = contentFocused && m.currentView == ViewIncome
-	m.expenseTable.Focused = contentFocused && m.currentView == ViewExpenses
-}
-
 func (m *Model) resize(width, height int) {
 	m.layout = computeLayout(width, height)
 	l := m.layout
 
-	m.menu.SetSize(l.menuWidth, l.contentHeight)
-	m.chart.SetSize(l.mainWidth, l.contentHeight)
-	m.incomeTable.SetSize(l.mainWidth, l.contentHeight)
-	m.expenseTable.SetSize(l.mainWidth, l.contentHeight)
+	m.tabBar.SetWidth(l.width)
+	m.chart.SetSize(l.width, l.contentHeight)
+	m.incomeTable.SetSize(l.width, l.contentHeight)
+	m.expenseTable.SetSize(l.width, l.contentHeight)
 	m.helpBar.SetWidth(l.width)
 }
 

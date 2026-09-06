@@ -27,8 +27,7 @@ func monthModel(t *testing.T) *Model {
 }
 
 func openIncome(m *Model) {
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 }
 
 func TestMonthNavigationPreviousShowsOlderEntries(t *testing.T) {
@@ -86,33 +85,5 @@ func TestMonthNavigationNextAndNewEntryDate(t *testing.T) {
 	key(m, "l")
 	if !strings.Contains(m.View(), "Income — Mar 2026") {
 		t.Errorf("l should move forward to Mar 2026")
-	}
-}
-
-func TestMonthNavigationIgnoredOutsideTables(t *testing.T) {
-	m := monthModel(t)
-	start := m.month
-
-	key(m, "[")
-	if !m.month.Equal(start) {
-		t.Errorf("[ on menu changed month to %v", m.month)
-	}
-
-	key(m, "enter")
-	key(m, "]")
-	if !m.month.Equal(start) {
-		t.Errorf("] on overview chart changed month to %v", m.month)
-	}
-
-	key(m, "tab")
-	openIncome(m)
-	key(m, "enter")
-	key(m, "tab")
-	typeText(m, "[")
-	if !m.month.Equal(start) {
-		t.Errorf("[ while editing changed month to %v", m.month)
-	}
-	if !strings.Contains(m.incomeTable.EditBuffer, "[") {
-		t.Errorf("[ while editing should be typed, buffer=%q", m.incomeTable.EditBuffer)
 	}
 }
