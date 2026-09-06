@@ -34,6 +34,10 @@ func key(m *Model, k string) {
 		msg = tea.KeyMsg{Type: tea.KeyEnter}
 	case "tab":
 		msg = tea.KeyMsg{Type: tea.KeyTab}
+	case "shift+tab":
+		msg = tea.KeyMsg{Type: tea.KeyShiftTab}
+	case "up":
+		msg = tea.KeyMsg{Type: tea.KeyUp}
 	case "esc":
 		msg = tea.KeyMsg{Type: tea.KeyEsc}
 	case "down":
@@ -62,8 +66,7 @@ func typeText(m *Model, s string) {
 
 func openIncomeAndNew(t *testing.T, m *Model) {
 	t.Helper()
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	key(m, "n")
 	if !m.incomeTable.Editing {
 		t.Fatal("expected to be editing a new income row")
@@ -186,8 +189,7 @@ func TestChaosEditingDateIntoOtherMonthKeepsUIConsistent(t *testing.T) {
 
 func TestChaosDeleteOnEmptyTableDoesNotPanic(t *testing.T) {
 	m, _ := chaosModel(t)
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	key(m, "d")
 	key(m, "enter")
 	key(m, "tab")
@@ -196,8 +198,7 @@ func TestChaosDeleteOnEmptyTableDoesNotPanic(t *testing.T) {
 
 func TestChaosDeleteLastRowKeepsCursorInRange(t *testing.T) {
 	m, _ := chaosModel(t)
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	for range 3 {
 		key(m, "n")
 		key(m, "esc")
@@ -217,8 +218,7 @@ func TestChaosDeleteLastRowKeepsCursorInRange(t *testing.T) {
 func TestChaosSaveFailureKeepsTypedDataAndShowsError(t *testing.T) {
 	m, store := chaosModel(t)
 	store.SaveErr = errors.New("disk full")
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 	key(m, "n")
 	if m.err == nil {
 		t.Error("save error not surfaced")

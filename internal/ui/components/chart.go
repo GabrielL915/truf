@@ -1,8 +1,8 @@
 package components
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/NimbleMarkets/ntcharts/canvas"
@@ -13,11 +13,18 @@ import (
 	"github.com/gabriel-luiz/truf/pkg/utils"
 )
 
+const (
+	chartHeaderLines = 2
+	chartAxisLines   = 1
+	chartGridlines   = 5
+	minGutter        = 8
+)
+
 type Chart struct {
-	Data    ledger.ChartData
-	Focused bool
-	Width   int
-	Height  int
+	Data        ledger.ChartData
+	ActiveMonth string
+	Width       int
+	Height      int
 }
 
 func NewChart() *Chart {
@@ -28,6 +35,10 @@ func (c *Chart) SetData(data ledger.ChartData) {
 	c.Data = data
 }
 
+func (c *Chart) SetActiveMonth(label string) {
+	c.ActiveMonth = label
+}
+
 func (c *Chart) SetSize(width, height int) {
 	c.Width = width
 	c.Height = height
@@ -35,133 +46,112 @@ func (c *Chart) SetSize(width, height int) {
 
 func (c *Chart) View() string {
 	if len(c.Data.Months) == 0 {
-		return c.renderEmpty()
+		return styles.MutedStyle.
+			Width(c.Width).
+			Height(c.Height).
+			MaxHeight(c.Height).
+			Render("No data available.")
 	}
 	return c.renderChart()
 }
 
-func (c *Chart) renderEmpty() string {
-	content := lipgloss.NewStyle().
-		Foreground(styles.TextMuted).
-		Render("No data available.\nAdd income or expenses to see your balance chart.")
-
-	return c.panelStyle().
-		Width(c.Width - 2).
-		Height(c.Height - 2).
-		Render(content)
-}
-
-func (c *Chart) panelStyle() lipgloss.Style {
-	if c.Focused {
-		return styles.FocusedPanelStyle
-	}
-	return styles.PanelStyle
-}
-
 func (c *Chart) renderChart() string {
 	var sb strings.Builder
+	sb.WriteString(c.renderHeader())
+	sb.WriteString("\n\n")
 
-	title := lipgloss.NewStyle().Foreground(styles.Primary).Bold(true).Render("Balance Over Time")
-	summary := ""
-	if n := len(c.Data.Balance); n > 0 {
-		last := c.Data.Balance[n-1]
-		col := styles.Success
-		if last < 0 {
-			col = styles.Danger
-		}
-		summary = "  " + lipgloss.NewStyle().Foreground(col).Render(utils.FormatCurrency(last))
-	}
-	sb.WriteString(title + summary + "\n\n")
-
-	yLabelWidth := 9
-	chartW := c.Width - yLabelWidth - 6
-	chartH := c.Height - 9
-	if chartW < 10 {
-		chartW = 10
-	}
-	if chartH < 4 {
-		chartH = 4
+	minY, maxY, step := niceRange(c.dataRange())
+	labels := gridLabels(minY, maxY, step)
+	gutter := minGutter
+	for _, l := range labels {
+		gutter = max(gutter, len(l)+1)
 	}
 
-	minY, maxY := c.dataRange()
+	chartW := max(c.Width-gutter-2, 10)
+	chartH := max(c.Height-chartHeaderLines-chartAxisLines, 4)
+
 	n := len(c.Data.Balance)
-	minX := 0.0
-	maxX := float64(n - 1)
-	if maxX == 0 {
+	minX, maxX := 0.0, float64(n-1)
+	if maxX <= 0 {
 		maxX = 1
 	}
 
 	cnv := canvas.New(chartW, chartH)
-	c.drawSeries(&cnv, toFloat(c.Data.Income), minX, maxX, minY, maxY,
-		lipgloss.NewStyle().Foreground(styles.Success))
-	c.drawSeries(&cnv, toFloat(c.Data.Expenses), minX, maxX, minY, maxY,
-		lipgloss.NewStyle().Foreground(styles.Danger))
-	c.drawSeries(&cnv, toFloat(c.Data.Balance), minX, maxX, minY, maxY,
-		lipgloss.NewStyle().Foreground(styles.Accent))
+	grid := graph.NewBrailleGrid(chartW, chartH, minX, maxX, minY, maxY)
+	drawSeries(&cnv, grid, toFloat(c.Data.Income), lipgloss.NewStyle().Foreground(styles.Success))
+	drawSeries(&cnv, grid, toFloat(c.Data.Expenses), lipgloss.NewStyle().Foreground(styles.Danger))
+	drawSeries(&cnv, grid, toFloat(c.Data.Balance), lipgloss.NewStyle().Foreground(styles.Net))
 
-	canvasStr := cnv.View()
-	rows := strings.Split(strings.TrimRight(canvasStr, "\n"), "\n")
-	for i, row := range rows {
-		var yLabel string
-		switch i {
-		case 0:
-			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(int64(math.Round(maxY))))
-		case len(rows) - 1:
-			yLabel = fmt.Sprintf("%*s", yLabelWidth, utils.FormatCurrency(int64(math.Round(minY))))
-		default:
-			yLabel = strings.Repeat(" ", yLabelWidth)
+	rowLabels := map[int]string{}
+	for i, label := range labels {
+		v := minY + float64(i)*step
+		row := grid.GridPoint(canvas.Float64Point{X: 0, Y: v}).Y / 4
+		if row < 0 || row >= chartH {
+			continue
 		}
-		sb.WriteString(lipgloss.NewStyle().Foreground(styles.TextMuted).Render(yLabel))
+		if _, taken := rowLabels[row]; taken {
+			continue
+		}
+		rowLabels[row] = label
+		drawGridline(&cnv, row)
+	}
+
+	rows := strings.Split(strings.TrimRight(cnv.View(), "\n"), "\n")
+	for row, line := range rows {
+		sb.WriteString(styles.MutedStyle.Width(gutter).Align(lipgloss.Right).Render(rowLabels[row]))
 		sb.WriteString(" ")
-		sb.WriteString(row)
+		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString(c.renderXLabels(yLabelWidth+1, chartW))
-	sb.WriteString("\n")
+	sb.WriteString(c.renderXLabels(gutter+1, chartW))
 
-	sb.WriteString(c.renderLegend())
-
-	return c.panelStyle().
-		Width(c.Width - 2).
-		Height(c.Height - 2).
+	return lipgloss.NewStyle().
+		Width(c.Width).
+		Height(c.Height).
+		MaxHeight(c.Height).
 		Render(sb.String())
 }
 
-func (c *Chart) drawSeries(cnv *canvas.Model, data []float64, minX, maxX, minY, maxY float64, s lipgloss.Style) {
-	if len(data) == 0 {
+func (c *Chart) renderHeader() string {
+	title := styles.TitleStyle.Render("Balance · last " + strconv.Itoa(len(c.Data.Months)) + " months")
+	legend := lipgloss.NewStyle().Foreground(styles.Success).Render("⣿ Income") + "  " +
+		lipgloss.NewStyle().Foreground(styles.Danger).Render("⣿ Expenses") + "  " +
+		lipgloss.NewStyle().Foreground(styles.Net).Render("⣿ Balance")
+	gap := max(c.Width-2-lipgloss.Width(title)-lipgloss.Width(legend), 1)
+	return " " + title + strings.Repeat(" ", gap) + legend
+}
+
+func drawSeries(cnv *canvas.Model, grid *graph.BrailleGrid, data []float64, s lipgloss.Style) {
+	if len(data) == 0 || cnv.Width() <= 0 || cnv.Height() <= 0 {
 		return
 	}
-
-	w := cnv.Width()
-	h := cnv.Height()
-	if w <= 0 || h <= 0 {
-		return
-	}
-
-	bg := graph.NewBrailleGrid(w, h, minX, maxX, minY, maxY)
-
+	grid.Clear()
 	for i, v := range data {
-		p1 := bg.GridPoint(canvas.Float64Point{X: float64(i), Y: v})
-		bg.Set(p1)
-
+		p1 := grid.GridPoint(canvas.Float64Point{X: float64(i), Y: v})
+		grid.Set(p1)
 		if i > 0 {
-			prev := data[i-1]
-			p0 := bg.GridPoint(canvas.Float64Point{X: float64(i - 1), Y: prev})
-			interpolateBraille(bg, p0, p1)
+			p0 := grid.GridPoint(canvas.Float64Point{X: float64(i - 1), Y: data[i-1]})
+			interpolateBraille(grid, p0, p1)
 		}
 	}
+	graph.DrawBraillePatterns(cnv, canvas.Point{X: 0, Y: 0}, grid.BraillePatterns(), s)
+}
 
-	graph.DrawBraillePatterns(cnv, canvas.Point{X: 0, Y: 0}, bg.BraillePatterns(), s)
+func drawGridline(cnv *canvas.Model, row int) {
+	cell := canvas.NewCellWithStyle('┈', styles.ChromeStyle)
+	for x := 0; x < cnv.Width(); x++ {
+		p := canvas.Point{X: x, Y: row}
+		if cnv.Cell(p).Rune == 0 {
+			cnv.SetCell(p, cell)
+		}
+	}
 }
 
 func interpolateBraille(bg *graph.BrailleGrid, p0, p1 canvas.Point) {
 	dx := p1.X - p0.X
 	dy := p1.Y - p0.Y
-	steps := abs2(dx)
-	if abs2(dy) > steps {
-		steps = abs2(dy)
-	}
+	steps := max(abs(dx), abs(dy))
 	if steps == 0 {
 		return
 	}
@@ -173,7 +163,7 @@ func interpolateBraille(bg *graph.BrailleGrid, p0, p1 canvas.Point) {
 	}
 }
 
-func abs2(x int) int {
+func abs(x int) int {
 	if x < 0 {
 		return -x
 	}
@@ -181,23 +171,67 @@ func abs2(x int) int {
 }
 
 func (c *Chart) dataRange() (minY, maxY float64) {
-	var all []int64
-	all = append(all, c.Data.Balance...)
-	all = append(all, c.Data.Income...)
-	all = append(all, c.Data.Expenses...)
-	if len(all) == 0 {
-		return 0, 1
+	first := true
+	for _, series := range [][]int64{c.Data.Balance, c.Data.Income, c.Data.Expenses} {
+		for _, v := range series {
+			f := float64(v)
+			if first {
+				minY, maxY, first = f, f, false
+				continue
+			}
+			minY = math.Min(minY, f)
+			maxY = math.Max(maxY, f)
+		}
 	}
-	minY, maxY = float64(all[0]), float64(all[0])
-	for _, v := range all[1:] {
-		minY = math.Min(minY, float64(v))
-		maxY = math.Max(maxY, float64(v))
+	if first {
+		return 0, 1
 	}
 	if minY == maxY {
 		minY -= 1
 		maxY += 1
 	}
 	return minY, maxY
+}
+
+func niceRange(minY, maxY float64) (lo, hi, step float64) {
+	step = niceStep((maxY - minY) / float64(chartGridlines-1))
+	lo = math.Floor(minY/step) * step
+	hi = math.Ceil(maxY/step) * step
+	if lo == hi {
+		hi = lo + step
+	}
+	return lo, hi, step
+}
+
+func niceStep(raw float64) float64 {
+	if raw <= 1 || math.IsNaN(raw) || math.IsInf(raw, 0) {
+		return 1
+	}
+	mag := math.Pow(10, math.Floor(math.Log10(raw)))
+	switch f := raw / mag; {
+	case f <= 1:
+		return mag
+	case f <= 2:
+		return 2 * mag
+	case f <= 5:
+		return 5 * mag
+	}
+	return 10 * mag
+}
+
+func gridLabels(lo, hi, step float64) []string {
+	var labels []string
+	for v := lo; v <= hi+step/2 && len(labels) < 2*chartGridlines; v += step {
+		labels = append(labels, compactCurrency(v))
+	}
+	return labels
+}
+
+func compactCurrency(v float64) string {
+	if v >= math.MaxInt64 || v <= math.MinInt64 {
+		return ""
+	}
+	return strings.TrimSuffix(utils.FormatCurrency(int64(math.Round(v))), ",00")
 }
 
 func toFloat(cents []int64) []float64 {
@@ -213,28 +247,20 @@ func (c *Chart) renderXLabels(offset, chartW int) string {
 	if n == 0 {
 		return ""
 	}
-	spacing := chartW / n
-	if spacing < 1 {
-		spacing = 1
-	}
+	spacing := max(chartW/n, 1)
 
 	var sb strings.Builder
 	sb.WriteString(strings.Repeat(" ", offset))
-	for i, month := range c.Data.Months {
-		label := month
+	for _, month := range c.Data.Months {
+		label := []rune(month)
 		if len(label) > spacing {
 			label = label[:spacing]
 		}
-		pos := i * spacing
-		_ = pos
-		sb.WriteString(fmt.Sprintf("%-*s", spacing, label))
+		style := styles.MutedStyle
+		if month == c.ActiveMonth {
+			style = styles.TextStyle.Bold(true)
+		}
+		sb.WriteString(style.Width(spacing).Render(string(label)))
 	}
 	return sb.String()
-}
-
-func (c *Chart) renderLegend() string {
-	income := lipgloss.NewStyle().Foreground(styles.Success).Render("⣿ Income")
-	expense := lipgloss.NewStyle().Foreground(styles.Danger).Render("⣿ Expenses")
-	balance := lipgloss.NewStyle().Foreground(styles.Accent).Render("⣿ Balance")
-	return fmt.Sprintf("\n%s  %s  %s", income, expense, balance)
 }

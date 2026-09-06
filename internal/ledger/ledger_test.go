@@ -247,3 +247,17 @@ func TestNewReturnsLoadError(t *testing.T) {
 		t.Fatal("expected New to return the load error")
 	}
 }
+
+func TestOldestIsEarliestEntryDateAndFalseWhenEmpty(t *testing.T) {
+	l, _ := newLedger(t)
+	if _, ok := l.Oldest(); ok {
+		t.Fatal("Oldest on an empty ledger should report false")
+	}
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 1, Date: month(2026, time.March)})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Expense, Amount: 1, Date: month(2025, time.November)})
+	mustAdd(t, l, ledger.Entry{Kind: ledger.Income, Amount: 1, Date: month(2026, time.January)})
+	got, ok := l.Oldest()
+	if !ok || !got.Equal(month(2025, time.November)) {
+		t.Errorf("Oldest = %v, %v; want Nov 2025, true", got, ok)
+	}
+}

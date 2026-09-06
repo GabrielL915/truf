@@ -33,8 +33,7 @@ func BenchmarkViewOverview(b *testing.B) {
 
 func BenchmarkViewTable(b *testing.B) {
 	m := benchModel(b, 10_000)
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = m.View()
@@ -43,8 +42,7 @@ func BenchmarkViewTable(b *testing.B) {
 
 func BenchmarkKeyDownThenView(b *testing.B) {
 	m := benchModel(b, 10_000)
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})

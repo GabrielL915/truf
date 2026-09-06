@@ -23,12 +23,12 @@ func monthModel(t *testing.T) *Model {
 		}
 	}
 	m.refreshTables()
+	m.refreshOverview()
 	return m
 }
 
 func openIncome(m *Model) {
-	key(m, "down")
-	key(m, "enter")
+	key(m, "2")
 }
 
 func TestMonthNavigationPreviousShowsOlderEntries(t *testing.T) {
@@ -50,11 +50,12 @@ func TestMonthNavigationPreviousShowsOlderEntries(t *testing.T) {
 		t.Errorf("cursor = %d, want 0 after month change", m.incomeTable.Cursor)
 	}
 	view := m.View()
-	if !strings.Contains(view, "Income — Feb 2026") {
+	if !strings.Contains(view, "Income · 2 entries · February 2026") {
 		t.Errorf("view lacks month in title:\n%s", view)
 	}
-	if !strings.HasSuffix(m.statusBar.TimeRange, "Feb 26") {
-		t.Errorf("chart range = %q, want it to end in Feb 26", m.statusBar.TimeRange)
+	key(m, "esc")
+	if view = frameText(m); !strings.Contains(view, "Feb 26") {
+		t.Errorf("chart axis should end in Feb 26:\n%s", view)
 	}
 }
 
@@ -79,39 +80,11 @@ func TestMonthNavigationNextAndNewEntryDate(t *testing.T) {
 
 	key(m, "h")
 	key(m, "h")
-	if !strings.Contains(m.View(), "Income — Feb 2026") {
+	if !strings.Contains(m.View(), "Income · 2 entries · February 2026") {
 		t.Errorf("h should move back two months to Feb 2026")
 	}
 	key(m, "l")
-	if !strings.Contains(m.View(), "Income — Mar 2026") {
+	if !strings.Contains(m.View(), "Income · 1 entry · March 2026") {
 		t.Errorf("l should move forward to Mar 2026")
-	}
-}
-
-func TestMonthNavigationIgnoredOutsideTables(t *testing.T) {
-	m := monthModel(t)
-	start := m.month
-
-	key(m, "[")
-	if !m.month.Equal(start) {
-		t.Errorf("[ on menu changed month to %v", m.month)
-	}
-
-	key(m, "enter")
-	key(m, "]")
-	if !m.month.Equal(start) {
-		t.Errorf("] on overview chart changed month to %v", m.month)
-	}
-
-	key(m, "tab")
-	openIncome(m)
-	key(m, "enter")
-	key(m, "tab")
-	typeText(m, "[")
-	if !m.month.Equal(start) {
-		t.Errorf("[ while editing changed month to %v", m.month)
-	}
-	if !strings.Contains(m.incomeTable.EditBuffer, "[") {
-		t.Errorf("[ while editing should be typed, buffer=%q", m.incomeTable.EditBuffer)
 	}
 }

@@ -15,9 +15,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyPress(msg)
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.updateSizes()
+		m.resize(msg.Width, msg.Height)
 		return m, nil
 	}
 
@@ -25,135 +23,89 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.setErr(nil)
+
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+	if m.layout.tooSmall {
+		if msg.String() == "q" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if t := m.activeTable(); t != nil && t.Editing {
 		return m.handleTableEdit(msg, t)
 	}
 
 	switch msg.String() {
 	case "q":
-		if m.currentView == ViewOverview && m.focusedPanel == PanelMenu {
+		if m.currentView == ViewOverview {
 			return m, tea.Quit
 		}
-		return m, nil
 
-	case "ctrl+c":
-		return m, tea.Quit
+	case "1", "2", "3", "4", "5":
+		m.setView(ViewType(msg.String()[0] - '1'))
 
 	case "tab":
-		if m.focusedPanel == PanelMenu {
-			m.focusedPanel = PanelContent
-		} else {
-			m.focusedPanel = PanelMenu
-		}
-		m.updateFocus()
-		return m, nil
+		m.cycleView(1)
+
+	case "shift+tab":
+		m.cycleView(-1)
 
 	case "esc":
 		if m.currentView != ViewOverview {
-			m.currentView = ViewOverview
-			m.focusedPanel = PanelMenu
-			m.updateFocus()
-			m.refreshChart()
+			m.setView(ViewOverview)
 		}
-		return m, nil
 
 	case "up", "k":
-		return m.handleUp()
+		if t := m.activeTable(); t != nil {
+			t.Up()
+		}
 
 	case "down", "j":
-		return m.handleDown()
+		if t := m.activeTable(); t != nil {
+			t.Down()
+		}
 
 	case "pgup":
 		if m.currentView == ViewOverview && m.chartMonths < 24 {
 			m.chartMonths += 3
-			m.refreshChart()
+			m.refreshOverview()
 		}
-		return m, nil
 
 	case "pgdown":
 		if m.currentView == ViewOverview && m.chartMonths > 3 {
 			m.chartMonths -= 3
-			m.refreshChart()
+			m.refreshOverview()
 		}
-		return m, nil
 
 	case "[", "h":
-		return m.handleMonthShift(-1)
+		m.shiftMonth(-1)
 
 	case "]", "l":
-		return m.handleMonthShift(1)
+		m.shiftMonth(1)
 
 	case "enter":
-		return m.handleEnter()
+		if t := m.activeTable(); t != nil {
+			t.StartEdit()
+		}
 
 	case "n":
-		return m.handleNewEntry()
+		m.handleNewEntry()
 
 	case "d":
-		return m.handleDeleteEntry()
+		m.handleDeleteEntry()
 	}
 
 	return m, nil
 }
 
-func (m *Model) handleUp() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelMenu {
-		m.menu.Up()
-	} else if t := m.activeTable(); t != nil {
-		t.Up()
-	}
-	return m, nil
-}
-
-func (m *Model) handleDown() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelMenu {
-		m.menu.Down()
-	} else if t := m.activeTable(); t != nil {
-		t.Down()
-	}
-	return m, nil
-}
-
-func (m *Model) handleMonthShift(delta int) (tea.Model, tea.Cmd) {
-	if m.focusedPanel != PanelContent || m.activeTable() == nil {
-		return m, nil
-	}
-	m.shiftMonth(delta)
-	return m, nil
-}
-
-func (m *Model) handleEnter() (tea.Model, tea.Cmd) {
-	if m.focusedPanel == PanelMenu {
-		switch m.menu.SelectedItem().Key {
-		case "overview":
-			m.currentView = ViewOverview
-			m.refreshChart()
-		case "income":
-			m.currentView = ViewIncome
-			m.refreshTables()
-		case "expenses":
-			m.currentView = ViewExpenses
-			m.refreshTables()
-		case "categories":
-			m.currentView = ViewCategories
-		case "settings":
-			m.currentView = ViewSettings
-		}
-		m.focusedPanel = PanelContent
-		m.updateFocus()
-		return m, nil
-	}
-
-	if t := m.activeTable(); t != nil {
-		t.StartEdit()
-	}
-	return m, nil
-}
-
-func (m *Model) handleNewEntry() (tea.Model, tea.Cmd) {
+func (m *Model) handleNewEntry() {
 	t := m.activeTable()
-	if m.focusedPanel != PanelContent || t == nil {
-		return m, nil
+	if t == nil {
+		return
 	}
 
 	created, err := m.ledger.Add(ledger.Entry{Kind: t.Kind, Date: m.newEntryDate()})
@@ -162,23 +114,21 @@ func (m *Model) handleNewEntry() (tea.Model, tea.Cmd) {
 	m.refreshTables()
 	t.SelectByID(created.ID)
 	t.StartEdit()
-	return m, nil
 }
 
-func (m *Model) handleDeleteEntry() (tea.Model, tea.Cmd) {
+func (m *Model) handleDeleteEntry() {
 	t := m.activeTable()
-	if m.focusedPanel != PanelContent || t == nil {
-		return m, nil
+	if t == nil {
+		return
 	}
 
 	current, ok := t.Current()
 	if !ok {
-		return m, nil
+		return
 	}
 
 	m.setErr(m.ledger.Remove(current.ID))
 	m.refreshTables()
-	return m, nil
 }
 
 func (m *Model) handleTableEdit(msg tea.KeyMsg, t *components.EntryTable) (tea.Model, tea.Cmd) {
@@ -190,7 +140,6 @@ func (m *Model) handleTableEdit(msg tea.KeyMsg, t *components.EntryTable) (tea.M
 			m.setErr(err)
 			return m, nil
 		}
-		m.setErr(nil)
 		if !t.Editing {
 			m.commitEdit(t)
 		}
