@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/gabriel-luiz/truf/internal/ui/marks"
 	"github.com/gabriel-luiz/truf/internal/ui/styles"
 )
 
@@ -31,20 +32,46 @@ func (m *Model) renderContent() string {
 	case ViewExpenses:
 		return m.expenseTable.View()
 	case ViewCategories:
-		return m.renderPlaceholder("Categories", "Category management coming soon...")
+		return m.renderPlaceholder("Categories")
 	case ViewSettings:
-		return m.renderPlaceholder("Settings", "Settings coming soon...")
+		return m.renderPlaceholder("Settings")
 	default:
-		return m.chart.View()
+		return m.renderOverview()
 	}
 }
 
-func (m *Model) renderPlaceholder(title, message string) string {
-	return lipgloss.NewStyle().
-		Width(m.layout.width).
-		Height(m.layout.contentHeight).
-		Padding(1, 2).
-		Render(styles.TitleStyle.Render(title) + "\n\n" + styles.MutedStyle.Render(message))
+func (m *Model) renderOverview() string {
+	if m.empty {
+		return m.renderEmptyState()
+	}
+	return m.summary.View() + "\n\n" + m.chart.View()
+}
+
+func (m *Model) renderEmptyState() string {
+	return m.centred(
+		styles.AccentStyle.Render(marks.Large),
+		"",
+		lipgloss.NewStyle().Bold(true).Foreground(styles.Text).Render("Nothing here yet."),
+		styles.MutedStyle.Render("Press 2 or 3, then n to add your first entry."),
+		styles.MutedStyle.Render("Or run truf --seed for sample data."),
+	)
+}
+
+func (m *Model) renderPlaceholder(title string) string {
+	return m.centred(
+		styles.AccentStyle.Render(marks.Large),
+		"",
+		styles.TitleStyle.Render(title),
+		styles.MutedStyle.Render("coming soon"),
+	)
+}
+
+func (m *Model) centred(blocks ...string) string {
+	for i, b := range blocks {
+		blocks[i] = lipgloss.NewStyle().Width(lipgloss.Width(b)).Align(lipgloss.Center).Render(b)
+	}
+	body := lipgloss.JoinVertical(lipgloss.Center, blocks...)
+	return lipgloss.Place(m.layout.width, m.layout.contentHeight, lipgloss.Center, lipgloss.Center, body)
 }
 
 func (m *Model) renderTooSmall() string {

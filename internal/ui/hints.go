@@ -10,6 +10,14 @@ func (m *Model) hints() []components.Hint {
 			{Key: "esc", Verb: "cancel"},
 		}
 	}
+	if m.currentView == ViewOverview && m.empty {
+		return []components.Hint{
+			{Key: "2", Verb: "income"},
+			{Key: "3", Verb: "expenses"},
+			{Key: "n", Verb: "new entry"},
+			{Key: "q", Verb: "quit"},
+		}
+	}
 	switch m.currentView {
 	case ViewOverview:
 		return []components.Hint{

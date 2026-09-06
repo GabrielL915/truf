@@ -230,6 +230,16 @@ func (l *Ledger) ChartSeries(endMonth time.Time, n int) ChartData {
 	return data
 }
 
+func (l *Ledger) Oldest() (time.Time, bool) {
+	var oldest time.Time
+	for _, e := range l.entries {
+		if oldest.IsZero() || e.Date.Before(oldest) {
+			oldest = e.Date
+		}
+	}
+	return oldest, !oldest.IsZero()
+}
+
 func (l *Ledger) TotalBalance() int64 {
 	var total int64
 	for _, e := range l.entries {

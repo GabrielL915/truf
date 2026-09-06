@@ -27,6 +27,7 @@ type Model struct {
 	month  time.Time
 
 	tabBar       *components.TabBar
+	summary      *components.Summary
 	chart        *components.Chart
 	helpBar      *components.HelpBar
 	incomeTable  *components.EntryTable
@@ -34,6 +35,7 @@ type Model struct {
 
 	currentView ViewType
 	chartMonths int
+	empty       bool
 
 	layout layout
 
@@ -45,6 +47,7 @@ func NewModel(book *ledger.Ledger) *Model {
 		ledger:       book,
 		month:        utils.FirstOfMonth(book.Now()),
 		tabBar:       components.NewTabBar(viewLabels),
+		summary:      components.NewSummary(),
 		chart:        components.NewChart(),
 		helpBar:      components.NewHelpBar(),
 		incomeTable:  components.NewEntryTable("Income", ledger.Income),
@@ -54,7 +57,7 @@ func NewModel(book *ledger.Ledger) *Model {
 	}
 
 	m.tabBar.SetMonth(m.month)
-	m.refreshChart()
+	m.refreshOverview()
 	m.refreshTables()
 	return m
 }
@@ -92,7 +95,7 @@ func (m *Model) setView(v ViewType) {
 	m.tabBar.SetActive(int(v))
 	switch v {
 	case ViewOverview:
-		m.refreshChart()
+		m.refreshOverview()
 	case ViewIncome, ViewExpenses:
 		m.refreshTables()
 	}
@@ -103,8 +106,25 @@ func (m *Model) cycleView(delta int) {
 	m.setView(ViewType((int(m.currentView) + delta + n) % n))
 }
 
-func (m *Model) refreshChart() {
+func (m *Model) refreshOverview() {
 	m.chart.SetData(m.ledger.ChartSeries(m.month, m.chartMonths))
+	m.chart.SetActiveMonth(utils.FormatMonthYear(m.month))
+
+	current := m.ledger.Summary(m.month)
+	previous := m.ledger.Summary(utils.AddMonths(m.month, -1))
+	oldest, ok := m.ledger.Oldest()
+	m.empty = !ok
+
+	s := m.summary
+	s.Month = m.month
+	s.Income = current.TotalIncome
+	s.Expenses = current.TotalExpenses
+	s.Net = current.Balance
+	s.NetChange = current.Balance - previous.Balance
+	s.IncomeCount = len(m.ledger.Entries(m.month, ledger.Income))
+	s.ExpenseCount = len(m.ledger.Entries(m.month, ledger.Expense))
+	s.Balance = m.ledger.TotalBalance()
+	s.Since = oldest
 }
 
 func (m *Model) refreshTables() {
@@ -122,7 +142,7 @@ func (m *Model) shiftMonth(delta int) {
 	m.incomeTable.ResetCursor()
 	m.expenseTable.ResetCursor()
 	m.refreshTables()
-	m.refreshChart()
+	m.refreshOverview()
 }
 
 func (m *Model) setErr(err error) {
@@ -135,7 +155,8 @@ func (m *Model) resize(width, height int) {
 	l := m.layout
 
 	m.tabBar.SetWidth(l.width)
-	m.chart.SetSize(l.width, l.contentHeight)
+	m.summary.SetWidth(l.width)
+	m.chart.SetSize(l.width, l.contentHeight-components.SummaryHeight-1)
 	m.incomeTable.SetSize(l.width, l.contentHeight)
 	m.expenseTable.SetSize(l.width, l.contentHeight)
 	m.helpBar.SetWidth(l.width)

@@ -72,13 +72,13 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgup":
 		if m.currentView == ViewOverview && m.chartMonths < 24 {
 			m.chartMonths += 3
-			m.refreshChart()
+			m.refreshOverview()
 		}
 
 	case "pgdown":
 		if m.currentView == ViewOverview && m.chartMonths > 3 {
 			m.chartMonths -= 3
-			m.refreshChart()
+			m.refreshOverview()
 		}
 
 	case "[", "h":

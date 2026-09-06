@@ -23,6 +23,7 @@ func monthModel(t *testing.T) *Model {
 		}
 	}
 	m.refreshTables()
+	m.refreshOverview()
 	return m
 }
 
