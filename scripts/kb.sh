@@ -27,7 +27,6 @@ jq_bin() {
 }
 JQ="$(jq_bin)"
 
-# one line per entry: id  [type/topic]  summary
 line_fmt='"\(.id)\t[\(.type)/\(.topic)]\t\(.summary)"'
 
 full_fmt='
@@ -42,7 +41,6 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   search|s)
     [ $# -ge 1 ] || { echo "usage: kb.sh search <term> [term...]" >&2; exit 2; }
-    # each term must appear somewhere in the JSON line (any field), case-insensitive
     filter='.'
     for t in "$@"; do
       esc=$(printf '%s' "$t" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')
@@ -107,7 +105,6 @@ case "$cmd" in
     if [ "$bad" -eq 0 ]; then echo "ok: $n entries, ids unique"; else exit 1; fi
     ;;
   check)
-    # CI gate: validate + every ref exists in the tree (or is gitignored, e.g. local-only reports/specs)
     "$0" validate
     bad=0
     while IFS=$'\t' read -r id ref; do

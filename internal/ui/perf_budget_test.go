@@ -11,12 +11,8 @@ import (
 	"github.com/gabriel-luiz/truf/internal/storage"
 )
 
-// raceEnabled is flipped on by race_test.go under -race, where budgets are meaningless.
 var raceEnabled = false
 
-// Budgets are ~10x the measured local numbers so slow CI runners pass while a
-// real regression (an O(n²) loop, a per-frame re-query of the whole DB) still fails.
-// Set TRUF_PERF_STRICT=1 to run them at ~3x for local profiling.
 const (
 	budgetEntries       = 10_000
 	budgetFrames        = 200
@@ -53,7 +49,6 @@ func budgetModel(t *testing.T) *Model {
 	return m
 }
 
-// medianFrame renders `frames` times and returns the median, which is robust to GC pauses.
 func medianFrame(m *Model, frames int) time.Duration {
 	samples := make([]time.Duration, frames)
 	for i := range samples {
@@ -61,7 +56,6 @@ func medianFrame(m *Model, frames int) time.Duration {
 		_ = m.View()
 		samples[i] = time.Since(start)
 	}
-	// insertion sort: n is tiny
 	for i := 1; i < len(samples); i++ {
 		for j := i; j > 0 && samples[j] < samples[j-1]; j-- {
 			samples[j], samples[j-1] = samples[j-1], samples[j]
