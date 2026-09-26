@@ -33,7 +33,7 @@ jobs:
         run: |
           ext=""; [ "$GOOS" = "windows" ] && ext=".exe"
           out="truf_${GITHUB_REF_NAME}_${GOOS}_${GOARCH}${ext}"
-          go build -trimpath -ldflags "-s -w" -o "dist/$out" ./cmd/truf
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/$out" ./cmd/truf
           echo "ASSET=$out" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v7
         with:
