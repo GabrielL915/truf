@@ -26,6 +26,17 @@ To try it with sample data:
 go run ./cmd/truf --seed
 ```
 
+Flags:
+
+| Flag | Action |
+| --- | --- |
+| `--db <path>` | use another ledger database (default `~/.truf/truf.db`) |
+| `--seed` | fill the ledger with sample data and exit |
+| `--version` | print the version and exit |
+| `-h`, `--help` | show usage |
+
+Unknown flags print the usage and exit with status 2.
+
 ## Keys
 
 | Key | Where | Action |
