@@ -31,6 +31,8 @@ jobs:
           fi
       - name: go vet
         run: go vet ./...
+      - name: no comments
+        run: go run ./scripts/nocomments
       - name: knowledge base check
         run: bash scripts/kb.sh check
       - name: go mod tidy check
@@ -65,7 +67,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     env:
-      MAX_BINARY_BYTES: "12000000" # stripped, pure-Go sqlite; ~8 MB today
+      MAX_BINARY_BYTES: "12000000"
       BENCH_FLAGS: -run '^$' -bench . -benchmem -benchtime=300ms -count=5
     steps:
       - uses: actions/checkout@v7
@@ -122,7 +124,6 @@ jobs:
       - name: Compare with benchstat
         if: always()
         run: |
-          # benchstat@latest needs a newer Go than go.mod; let go fetch that toolchain just for this install
           GOTOOLCHAIN=auto go install golang.org/x/perf/cmd/benchstat@latest
           echo "## Benchmarks" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
