@@ -209,25 +209,38 @@ func (l *Ledger) ChartSeries(endMonth time.Time, n int) ChartData {
 		return ChartData{}
 	}
 	data := ChartData{
-		Months:   make([]string, 0, n),
-		Income:   make([]int64, 0, n),
-		Expenses: make([]int64, 0, n),
-		Balance:  make([]int64, 0, n),
+		Months:   make([]string, n),
+		Income:   make([]int64, n),
+		Expenses: make([]int64, n),
+		Balance:  make([]int64, n),
+	}
+
+	first := utils.AddMonths(utils.FirstOfMonth(endMonth), -(n - 1))
+	firstIndex := monthIndex(first)
+	for _, e := range l.entries {
+		i := monthIndex(e.Date) - firstIndex
+		if i < 0 || i >= n {
+			continue
+		}
+		if e.Kind == Income {
+			data.Income[i] += e.Amount
+		} else {
+			data.Expenses[i] += e.Amount
+		}
 	}
 
 	var running int64
-	for i := n - 1; i >= 0; i-- {
-		month := utils.AddMonths(utils.FirstOfMonth(endMonth), -i)
-		summary := l.Summary(month)
-		running += summary.Balance
-
-		data.Months = append(data.Months, utils.FormatMonthYear(month))
-		data.Income = append(data.Income, summary.TotalIncome)
-		data.Expenses = append(data.Expenses, summary.TotalExpenses)
-		data.Balance = append(data.Balance, running)
+	for i := range n {
+		data.Months[i] = utils.FormatMonthYear(utils.AddMonths(first, i))
+		running += data.Income[i] - data.Expenses[i]
+		data.Balance[i] = running
 	}
 
 	return data
+}
+
+func monthIndex(t time.Time) int {
+	return t.Year()*12 + int(t.Month()) - 1
 }
 
 func (l *Ledger) Oldest() (time.Time, bool) {

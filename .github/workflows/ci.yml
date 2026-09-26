@@ -103,13 +103,13 @@ jobs:
       - name: Perf budgets (strict)
         env:
           TRUF_PERF_STRICT: "1"
-        run: go test -count=1 -run 'PerfBudget' -v ./internal/ui/ 2>&1 | tee budgets.txt
+        run: go test -count=1 -run 'PerfBudget' -v ./internal/ledger/ ./internal/ui/ 2>&1 | tee budgets.txt
       - name: Budgets summary
         if: always()
         run: |
-          echo "## Frame budgets (strict, 10k entries)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Perf budgets (strict, 10k entries)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -E "frame median|PASS|FAIL" budgets.txt >> "$GITHUB_STEP_SUMMARY" || true
+          grep -E "median|PASS|FAIL" budgets.txt >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Benchmarks (head)
